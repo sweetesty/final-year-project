@@ -33,6 +33,7 @@ export const useAuthViewModel = () => {
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string = '', userRole: 'patient' | 'doctor' = 'patient') => {
+    // 1. Create auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -41,6 +42,21 @@ export const useAuthViewModel = () => {
       },
     });
     if (error) throw error;
+
+    // 2. Manually upsert the profile (more reliable than relying on DB trigger)
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          full_name: fullName,
+          role: userRole,
+        });
+      if (profileError) {
+        console.warn('[signUp] Profile upsert failed (trigger may have handled it):', profileError.message);
+      }
+    }
+
     return data;
   };
 

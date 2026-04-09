@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withRepeat, 
-  withTiming, 
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
   withSequence,
   interpolate,
   Extrapolate
@@ -13,7 +13,10 @@ import Animated, {
 import { Colors, Spacing, BorderRadius, Shadows, GlassFilters } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SpeechService } from '@/src/services/SpeechService';
-import { AiChatService } from '@/src/services/AiChatService';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
+import { useFallDetectionViewModel } from '@/src/viewmodels/useFallDetectionViewModel';
+import { DoctorService } from '@/src/services/DoctorService';
+import { VitalsService } from '@/src/services/VitalsService';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +25,14 @@ export default function IntelligenceHub() {
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const glassStyle = GlassFilters[colorScheme as 'light' | 'dark'];
   const router = useRouter();
+  const { session } = useAuthViewModel();
+  const patientId = session?.user?.id ?? '';
+  const patientName = session?.user?.user_metadata?.full_name ?? 'there';
+  const firstName = patientName.split(' ')[0];
+
+  const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientId, patientName);
+
+  const [patientCode, setPatientCode] = useState<string>('------');
 
   // State for mocked vitals
   const [vitals, setVitals] = useState({
@@ -30,6 +41,15 @@ export default function IntelligenceHub() {
     steps: 1240,
     activeTime: '2h 15m'
   });
+
+  // Load patient code from Supabase (creates one if it doesn't exist)
+  useEffect(() => {
+    if (patientId) {
+      DoctorService.ensurePatientCode(patientId).then(code => {
+        if (code) setPatientCode(code.replace(/(\d{3})(\d{3})/, '$1 $2'));
+      }).catch(console.error);
+    }
+  }, [patientId]);
 
   // Pulse animation for AI Button
   const pulse = useSharedValue(1);
@@ -49,29 +69,56 @@ export default function IntelligenceHub() {
     shadowOpacity: interpolate(pulse.value, [1, 1.1], [0.3, 0.6], Extrapolate.CLAMP),
   }));
 
-  // Proactive Monitoring Logic
+  // Proactive Monitoring Logic + Vitals Persistence
   useEffect(() => {
+    let stepAccumulator = vitals.steps;
+
     const interval = setInterval(() => {
       // Simulate vitals fluctuations
       const newHr = 70 + Math.floor(Math.random() * 10);
-      setVitals(prev => ({ ...prev, heartRate: newHr }));
+      const newSpo2 = 96 + Math.floor(Math.random() * 4);
+      stepAccumulator += Math.floor(Math.random() * 20);
 
-      // Proactive Check: If Heart Rate > 100 (Simulated Tachycardia for demo)
+      setVitals(prev => ({ ...prev, heartRate: newHr, spo2: newSpo2, steps: stepAccumulator }));
+
+      // Proactive Check: Simulated Tachycardia for demo
       if (newHr > 95) {
-        SpeechService.speak(`Esther, I noticed your heart rate is increasing to ${newHr} beats per minute. Please consider sitting down and taking a deep breath.`);
+        SpeechService.speak(`${firstName}, I noticed your heart rate is increasing to ${newHr} beats per minute. Please consider sitting down and taking a deep breath.`);
+      }
+
+      // Persist vitals to Supabase every 60s (4 × 15s intervals)
+      if (patientId) {
+        VitalsService.logVitals({
+          patientId,
+          heartRate: newHr,
+          spo2: newSpo2,
+          steps: stepAccumulator,
+          timestamp: new Date().toISOString(),
+        }).catch(console.error);
       }
     }, 15000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [patientId, firstName]);
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      {/* Fall Detection Alert Overlay */}
+      {fallState === 'user_response_window' && (
+        <View style={[styles.fallAlert, { backgroundColor: themeColors.emergency }]}>
+          <Text style={styles.fallAlertTitle}>⚠️ Fall Detected</Text>
+          <Text style={styles.fallAlertText}>Are you okay? Emergency alert in 20 seconds.</Text>
+          <TouchableOpacity style={styles.fallAlertButton} onPress={cancelAlert}>
+            <Text style={styles.fallAlertButtonText}>I'm OK — Cancel Alert</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* Intelligence Status Header */}
         <View style={styles.header}>
-          <Text style={[styles.greeting, { color: themeColors.text }]}>Welcome back, Esther</Text>
+          <Text style={[styles.greeting, { color: themeColors.text }]}>Welcome back, {firstName}</Text>
           <View style={[styles.statusBanner, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
             <View style={[styles.pulseDot, { backgroundColor: themeColors.vital }]} />
             <Text style={[styles.statusText, { color: themeColors.muted }]}>System Status: <Text style={{ color: themeColors.vital, fontWeight: '700' }}>OPTIMIZED</Text></Text>
@@ -89,7 +136,9 @@ export default function IntelligenceHub() {
             <Text style={styles.aiLabel}>Talk to Companion</Text>
           </TouchableOpacity>
           <View style={styles.hubOverlay}>
-             <Text style={[styles.aiStatus, { color: themeColors.muted }]}>AI is analyzing your movement patterns...</Text>
+             <Text style={[styles.aiStatus, { color: themeColors.muted }]}>
+               {isUserActive ? '🏃 Active movement detected — threshold raised' : '🛡️ Fall detection active — monitoring movement'}
+             </Text>
           </View>
         </View>
 
@@ -126,7 +175,7 @@ export default function IntelligenceHub() {
           <View style={[styles.clinicalCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
             <View>
               <Text style={{ color: themeColors.muted, fontSize: 12 }}>YOUR PATIENT CODE</Text>
-              <Text style={[styles.patientCodeText, { color: themeColors.tint }]}>823 441</Text>
+              <Text style={[styles.patientCodeText, { color: themeColors.tint }]}>{patientCode}</Text>
               <Text style={{ color: themeColors.muted, fontSize: 10 }}>Share this with your doctor</Text>
             </View>
             <TouchableOpacity 
@@ -306,5 +355,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     ...Shadows.light,
+  },
+  fallAlert: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    padding: Spacing.lg,
+    paddingTop: Spacing.xxl,
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  fallAlertTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  fallAlertText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+  },
+  fallAlertButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.sm,
+    ...Shadows.medium,
+  },
+  fallAlertButtonText: {
+    color: '#DC2626',
+    fontWeight: '800',
+    fontSize: 16,
   },
 });

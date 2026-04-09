@@ -4,13 +4,15 @@ import { Stack, useRouter } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 export default function MedicationDashboard() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  
-  const { medications, todayLogs, loading, logDose } = useMedicationViewModel('patient-123');
+  const { session } = useAuthViewModel();
+
+  const { medications, todayLogs, loading, logDose } = useMedicationViewModel(session?.user?.id ?? '');
 
   // Logic to determine which doses are due today
   const todaySchedule = medications.flatMap(med => {

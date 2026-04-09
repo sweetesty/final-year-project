@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/SupabaseService';
 import { Session } from '@supabase/supabase-js';
+import { BackgroundMonitorService } from '../services/BackgroundMonitorService';
 
 export const useAuthViewModel = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -32,6 +33,7 @@ export const useAuthViewModel = () => {
   }, []);
 
   const signOut = async () => {
+    await BackgroundMonitorService.unregister();
     await supabase.auth.signOut();
     setRole(null);
   };

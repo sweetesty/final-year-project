@@ -5,13 +5,20 @@ import 'react-native-url-polyfill/auto';
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('⚠️ Supabase credentials NOT found in environment! Check your .env file.');
+const isConfigured = supabaseUrl && !supabaseUrl.includes('placeholder');
+
+if (!isConfigured) {
+  console.warn('⚠️ Supabase credentials are placeholders. Backend features disabled until configured.');
 } else {
-  console.log('✅ Supabase initialized with URL:', supabaseUrl.substring(0, 15) + '...');
+  console.log('✅ Supabase initialized with URL:', supabaseUrl.substring(0, 20) + '...');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Use a valid-looking fallback URL so createClient doesn't throw —
+// all queries will simply fail gracefully when credentials are placeholders.
+export const supabase = createClient(
+  isConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  isConfigured ? supabaseAnonKey : 'placeholder'
+);
 
 export class DataService {
   /**

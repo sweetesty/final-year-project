@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { AppState } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -9,6 +10,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { NotificationService } from '@/src/services/NotificationService';
 import { DataService } from '@/src/services/SupabaseService';
+import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
+import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -41,7 +44,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (session?.user?.id) {
-      const setupPushNotifications = async () => {
+      const setupServices = async () => {
         try {
           const token = await NotificationService.registerForPushNotificationsAsync();
           if (token) {
@@ -50,9 +53,15 @@ export default function RootLayout() {
         } catch (error) {
           console.error('Failed to setup push notifications:', error);
         }
+
+        try {
+          await BackgroundMonitorService.register();
+        } catch (error) {
+          console.error('Failed to register background monitor:', error);
+        }
       };
 
-      setupPushNotifications();
+      setupServices();
 
       const unsubscribe = NotificationService.addNotificationListeners(
         (notification) => {
@@ -66,6 +75,16 @@ export default function RootLayout() {
       return () => unsubscribe();
     }
   }, [session?.user?.id]);
+
+  // Flush offline queue whenever the app comes to the foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        OfflineSyncService.flush().catch(console.error);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   if (!isReady) {
     return null;

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/SupabaseService';
 import { Medication, MedicationLog, NewMedication } from '../models/Medication';
 import { NotificationService } from '../services/NotificationService';
+import { OfflineSyncService } from '../services/OfflineSyncService';
 
 export const useMedicationViewModel = (patientId: string) => {
   const [medications, setMedications] = useState<Medication[]>([]);
@@ -50,18 +51,18 @@ export const useMedicationViewModel = (patientId: string) => {
   };
 
   const logDose = async (medicationId: string, scheduledTime: string, status: 'taken' | 'skipped') => {
-    const { error } = await supabase
-      .from('medication_logs')
-      .insert({
+    try {
+      await OfflineSyncService.write('medication_logs', 'insert', {
         medicationId,
         patientId,
         status,
         scheduledTime,
         takenAt: new Date().toISOString(),
       });
-
-    if (error) alert(error.message);
-    else await fetchTodayLogs();
+      await fetchTodayLogs();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   useEffect(() => {

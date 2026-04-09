@@ -3,6 +3,7 @@ import { OpenAiService } from '../services/OpenAiService';
 import { SpeechService } from '../services/SpeechService';
 import { VoiceService } from '../services/VoiceService';
 import { supabase } from '../services/SupabaseService';
+import { useAuthViewModel } from './useAuthViewModel';
 
 export interface Message {
   id: string;
@@ -11,11 +12,15 @@ export interface Message {
   timestamp: Date;
 }
 
-export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
+export const useAiAssistantViewModel = () => {
+  const { session } = useAuthViewModel();
+  const patientId = session?.user?.id ?? '';
+  const patientName = session?.user?.user_metadata?.full_name ?? 'the patient';
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: "Hello! I'm your OpenAI-powered Vitals Fusion companion. How are you feeling today?",
+      text: "Hello! I'm your Vitals Fusion AI companion. How are you feeling today?",
       sender: 'assistant',
       timestamp: new Date(),
     }
@@ -24,24 +29,25 @@ export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
   const [isListening, setIsListening] = useState(false);
 
   const getPatientContext = async () => {
+    if (!patientId) return "Patient not authenticated.";
     try {
       // 1. Fetch Medications
       const { data: meds } = await supabase
         .from('medications')
         .select('name, dosage, frequency')
         .eq('patientId', patientId);
-      
+
       // 2. Fetch Profile
       const { data: profile } = await supabase
-        .from('medical_details') // Assuming this exists or using medical-details.tsx logic
+        .from('medical_details')
         .select('*')
         .eq('patientId', patientId)
         .single();
 
       return `
-      PATIENT NAME: Esther Ajanaku
+      PATIENT NAME: ${patientName}
       MEDICATIONS: ${meds?.map(m => `${m.name} (${m.dosage}) ${m.frequency}`).join(', ') || 'No medications listed'}
-      MEDICAL PROFILE: ${profile ? JSON.stringify(profile) : 'Basic healthy status, no chronic alerts'}
+      MEDICAL PROFILE: ${profile ? JSON.stringify(profile) : 'No medical profile on record'}
       `;
     } catch (error) {
       console.error("Context Fetch Error:", error);

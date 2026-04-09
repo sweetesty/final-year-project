@@ -7,77 +7,73 @@ export const useEmergencyContactsViewModel = (patientId: string) => {
   const [loading, setLoading] = useState(true);
 
   const fetchContacts = useCallback(async () => {
+    if (!patientId) { setLoading(false); return; }
     setLoading(true);
     const { data, error } = await supabase
       .from('emergency_contacts')
       .select('*')
-      .eq('patientId', patientId);
+      .eq('patientid', patientId)          // DB: patientid (lowercase)
+      .order('createdat', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching contacts:', error);
-    } else {
-      setContacts(data || []);
-    }
+    if (error) console.error('[EmergencyContacts] Fetch error:', error);
+    // Map DB snake_case → camelCase for the UI
+    else setContacts((data ?? []).map(mapRow));
     setLoading(false);
   }, [patientId]);
 
   const addContact = async (contact: NewEmergencyContact) => {
     const { data, error } = await supabase
       .from('emergency_contacts')
-      .insert({ ...contact, patientId })
+      .insert({
+        patientid:    patientId,           // DB: patientid
+        name:         contact.name,
+        phone:        contact.phone,
+        relationship: contact.relationship,
+        isprimary:    contact.isPrimary ?? false,  // DB: isprimary
+      })
       .select()
       .single();
 
-    if (error) {
-      alert(error.message);
-    } else {
-      setContacts([...contacts, data]);
-    }
+    if (error) { alert(error.message); return; }
+    setContacts(prev => [...prev, mapRow(data)]);
   };
 
   const deleteContact = async (id: string) => {
-    const { error } = await supabase
-      .from('emergency_contacts')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert(error.message);
-    } else {
-      setContacts(contacts.filter(c => c.id !== id));
-    }
+    const { error } = await supabase.from('emergency_contacts').delete().eq('id', id);
+    if (error) { alert(error.message); return; }
+    setContacts(prev => prev.filter(c => c.id !== id));
   };
 
   const setPrimary = async (id: string) => {
-    // First, set all to false
+    // Clear all primaries first
     await supabase
       .from('emergency_contacts')
-      .update({ isPrimary: false })
-      .eq('patientId', patientId);
+      .update({ isprimary: false })        // DB: isprimary
+      .eq('patientid', patientId);
 
-    // Then set the chosen one to true
     const { error } = await supabase
       .from('emergency_contacts')
-      .update({ isPrimary: true })
+      .update({ isprimary: true })
       .eq('id', id);
 
-    if (error) {
-      alert(error.message);
-    } else {
-      await fetchContacts();
-    }
+    if (error) { alert(error.message); return; }
+    setContacts(prev => prev.map(c => ({ ...c, isPrimary: c.id === id })));
   };
 
-  useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+  useEffect(() => { fetchContacts(); }, [fetchContacts]);
 
-  return {
-    contacts,
-    loading,
-    addContact,
-    deleteContact,
-    setPrimary,
-    refresh: fetchContacts,
-  };
+  return { contacts, loading, addContact, deleteContact, setPrimary, refresh: fetchContacts };
 };
+
+// Map DB row (lowercase columns) → EmergencyContact (camelCase)
+function mapRow(row: any): EmergencyContact {
+  return {
+    id:           row.id,
+    patientId:    row.patientid,
+    name:         row.name,
+    phone:        row.phone,
+    relationship: row.relationship,
+    isPrimary:    row.isprimary,
+    createdAt:    row.createdat,
+  };
+}

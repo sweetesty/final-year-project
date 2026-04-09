@@ -12,6 +12,7 @@ import { NotificationService } from '@/src/services/NotificationService';
 import { DataService } from '@/src/services/SupabaseService';
 import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
 import { OfflineSyncService } from '@/src/services/OfflineSyncService';
+import { LocationService } from '@/src/services/LocationService';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -59,6 +60,9 @@ export default function RootLayout() {
         } catch (error) {
           console.error('Failed to register background monitor:', error);
         }
+
+        // Request location permission proactively so it's ready before an emergency
+        LocationService.requestPermissions().catch(console.error);
       };
 
       setupServices();

@@ -21,6 +21,8 @@ const MAPPING: Record<string, ComponentProps<typeof MaterialIcons>['name']> = {
   'sparkles.fill': 'auto-awesome',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'storefront.fill': 'local-pharmacy',
+  'cart.fill': 'shopping-cart',
 };
 
 /**

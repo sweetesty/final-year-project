@@ -65,6 +65,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles.fill" color={color} />,
         }}
       />
+
+      {/* Pharmacy / Shop tab */}
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Pharmacy',
+          href: isDoctor ? null : '/explore',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="storefront.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

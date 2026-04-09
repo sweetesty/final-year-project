@@ -129,6 +129,15 @@ export class OfflineSyncService {
     return queue.length;
   }
 
+  /**
+   * Clear all queued operations — use when schema changes make existing
+   * queued payloads invalid so they don't block future syncs.
+   */
+  static async clearQueue(): Promise<void> {
+    await AsyncStorage.removeItem(QUEUE_KEY);
+    console.log('[OfflineSync] Queue cleared.');
+  }
+
   private static async getQueue(): Promise<QueuedOperation[]> {
     try {
       const raw = await AsyncStorage.getItem(QUEUE_KEY);

@@ -12,9 +12,16 @@ export interface VitalsReading {
 export class VitalsService {
   /**
    * Persist a vitals reading to Supabase (offline-safe).
+   * Column names must match the DB: patientid (lowercase), heartRate, spo2, steps.
    */
   static async logVitals(reading: VitalsReading): Promise<void> {
-    await OfflineSyncService.write('vitals', 'insert', reading);
+    await OfflineSyncService.write('vitals', 'insert', {
+      patientid: reading.patientId,  // DB column is lowercase
+      heartRate: reading.heartRate,
+      spo2: reading.spo2,
+      steps: reading.steps,
+      timestamp: reading.timestamp,
+    });
   }
 
   /**
@@ -24,7 +31,7 @@ export class VitalsService {
     const { data, error } = await supabase
       .from('vitals')
       .select('*')
-      .eq('patientId', patientId)
+      .eq('patientid', patientId)  // DB column is lowercase
       .order('timestamp', { ascending: false })
       .limit(limit);
 

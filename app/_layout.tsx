@@ -76,6 +76,12 @@ export default function RootLayout() {
     }
   }, [session?.user?.id]);
 
+  // On first load, clear any stale queued operations from old schema
+  // (e.g. payloads with wrong column names that would fail forever)
+  useEffect(() => {
+    OfflineSyncService.clearQueue().catch(console.error);
+  }, []);
+
   // Flush offline queue whenever the app comes to the foreground
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

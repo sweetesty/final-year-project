@@ -1,28 +1,47 @@
 import { SensorData } from '../models/Vitals';
 
 // ─── Thresholds ───────────────────────────────────────────────────────────────
-const BASE_THRESHOLD      = 2.5;   // G — resting / sedentary
-const ACTIVITY_THRESHOLD  = 3.2;   // G — raised when walking/active
-const FREEFALL_THRESHOLD  = 0.4;   // G — below this = free-fall phase
-const STILLNESS_THRESHOLD = 1.2;   // G — below this = lying still after impact
-const STILLNESS_WINDOW    = 15;    // samples that must be "still" after impact
+const BASE_THRESHOLD      = 2.5;   // G — resting / sedentary impact trigger
+const ACTIVITY_THRESHOLD  = 3.2;   // G — raised when user is active
+const FREEFALL_THRESHOLD  = 0.6;   // G — below this counts as free-fall phase
+                                    //     (0.6 instead of 0.4 — hands-on drop)
+const STILLNESS_THRESHOLD = 1.3;   // G — below this = lying still after impact
+const STILLNESS_SAMPLES   = 10;    // consecutive still samples required (~500ms @ 20Hz)
+const FREEFALL_SAMPLES    = 2;     // consecutive free-fall samples required
 
-const ACTIVITY_WINDOW      = 50;   // ~5 s at 10 Hz
-const ACTIVITY_MEAN_CUTOFF = 1.3;  // mean G above this → user is active
+const ACTIVITY_WINDOW      = 50;   // samples (~2.5s at 20Hz)
+const ACTIVITY_MEAN_CUTOFF = 1.3;
 
 export class SignalService {
-  // 2-second sliding window for AI inference [acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z]
   private static readonly WINDOW_SIZE = 100;
   private static buffer: number[][] = [];
 
-  // Short buffer for activity detection
   private static activityBuffer: number[] = [];
 
-  // Ring buffer of recent G-Force magnitudes used for pattern detection
+  // G-Force ring buffer — pattern detection runs on this
   private static gBuffer: number[] = [];
-  private static readonly G_BUFFER_SIZE = 60; // ~3 s at 20 Hz
+  private static readonly G_BUFFER_SIZE = 80; // ~4s at 20Hz
+
+  // Fall pattern state machine
+  private static phase: 'watching' | 'freefall' | 'impact' | 'stillness' = 'watching';
+  private static freefallCount  = 0;
+  private static stillCount     = 0;
+  private static peakGSeen      = 0;
+  private static fallDetectedCb: ((peakG: number) => void) | null = null;
 
   // ── Public API ──────────────────────────────────────────────────────────────
+
+  /**
+   * Register a callback that fires when a complete fall pattern is confirmed.
+   * The callback receives the peak G-Force of the impact.
+   */
+  static onFallDetected(cb: (peakG: number) => void) {
+    this.fallDetectedCb = cb;
+  }
+
+  static clearFallCallback() {
+    this.fallDetectedCb = null;
+  }
 
   static addSample(data: SensorData) {
     const { x, y, z } = data.accelerometer;
@@ -30,22 +49,105 @@ export class SignalService {
     const gy = data.gyroscope.y;
     const gz = data.gyroscope.z;
 
-    const sample = [x, y, z, gx, gy, gz];
-    this.buffer.push(sample);
+    // Inference window
+    this.buffer.push([x, y, z, gx, gy, gz]);
     if (this.buffer.length > this.WINDOW_SIZE) this.buffer.shift();
 
     const g = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
+
+    // Activity buffer
     this.activityBuffer.push(g);
     if (this.activityBuffer.length > ACTIVITY_WINDOW) this.activityBuffer.shift();
 
+    // G ring buffer
     this.gBuffer.push(g);
     if (this.gBuffer.length > this.G_BUFFER_SIZE) this.gBuffer.shift();
+
+    // Run the state machine on every sample
+    this._runStateMachine(g);
   }
 
   /**
-   * Adaptive G-Force threshold — higher when the user is actively moving
-   * to reduce false positives during walking/exercise.
+   * Continuous state-machine fall detector — runs on every sample.
+   *
+   * States:
+   *  watching  → looking for free-fall phase
+   *  freefall  → counting consecutive low-G samples
+   *  impact    → detected impact spike; now watching for stillness
+   *  stillness → counting consecutive still samples after impact
+   *
+   * On completing the full cycle → fires fallDetectedCb(peakG)
    */
+  private static _runStateMachine(g: number) {
+    const threshold = this.getAdaptiveThreshold();
+
+    switch (this.phase) {
+      case 'watching':
+        if (g < FREEFALL_THRESHOLD) {
+          this.freefallCount = 1;
+          this.phase = 'freefall';
+        }
+        break;
+
+      case 'freefall':
+        if (g < FREEFALL_THRESHOLD) {
+          this.freefallCount++;
+        } else if (g > threshold && this.freefallCount >= FREEFALL_SAMPLES) {
+          // Impact detected after sufficient free-fall
+          this.peakGSeen = g;
+          this.stillCount = 0;
+          this.phase = 'impact';
+          console.log(`[SignalService] Impact detected: G=${g.toFixed(2)} after ${this.freefallCount} freefall samples`);
+        } else {
+          // Interrupted — not a fall pattern, reset
+          this.phase = 'watching';
+          this.freefallCount = 0;
+        }
+        break;
+
+      case 'impact':
+        // Track peak during impact window (could be multiple high-G samples)
+        if (g > this.peakGSeen) this.peakGSeen = g;
+
+        if (g < STILLNESS_THRESHOLD) {
+          this.stillCount = 1;
+          this.phase = 'stillness';
+        } else if (g > threshold * 1.5) {
+          // Another big spike — reset (e.g. bounced, not a fall)
+          this.phase = 'watching';
+          this.freefallCount = 0;
+          this.peakGSeen = 0;
+        }
+        break;
+
+      case 'stillness':
+        if (g < STILLNESS_THRESHOLD) {
+          this.stillCount++;
+          if (this.stillCount >= STILLNESS_SAMPLES) {
+            // ✅ Complete fall pattern confirmed
+            const peakG = this.peakGSeen;
+            console.log(`[SignalService] Fall pattern CONFIRMED: peakG=${peakG.toFixed(2)}`);
+            this._resetStateMachine();
+            if (this.fallDetectedCb) this.fallDetectedCb(peakG);
+          }
+        } else if (g > threshold) {
+          // Person got up quickly or another impact — reset
+          this._resetStateMachine();
+        } else {
+          // Brief movement — allow some tolerance, keep counting
+          this.stillCount = Math.max(0, this.stillCount - 1);
+        }
+        break;
+    }
+  }
+
+  private static _resetStateMachine() {
+    this.phase = 'watching';
+    this.freefallCount = 0;
+    this.stillCount = 0;
+    this.peakGSeen = 0;
+  }
+
   static getAdaptiveThreshold(): number {
     if (this.activityBuffer.length < 10) return BASE_THRESHOLD;
     const mean = this._mean(this.activityBuffer);
@@ -57,85 +159,21 @@ export class SignalService {
     return this._mean(this.activityBuffer) > ACTIVITY_MEAN_CUTOFF;
   }
 
-  /**
-   * Real fall pattern check — requires three phases in the recent G buffer:
-   *
-   *   1. FREE-FALL  : at least 2 consecutive samples < 0.4 G
-   *   2. IMPACT     : at least 1 sample > threshold (peak shock)
-   *   3. STILLNESS  : STILLNESS_WINDOW samples after impact averaging < 1.2 G
-   *
-   * This distinguishes a true fall from vigorous shaking, jumping, or
-   * a single hard tap on the device.
-   */
-  static detectFallPattern(impactThreshold: number): {
-    detected: boolean;
-    peakG: number;
-    freefallDetected: boolean;
-    stillnessDetected: boolean;
-  } {
-    const buf = this.gBuffer;
-    if (buf.length < 20) {
-      return { detected: false, peakG: 0, freefallDetected: false, stillnessDetected: false };
-    }
-
-    let impactIdx = -1;
-    let peakG = 0;
-    let freefallDetected = false;
-
-    // Scan forward to find the impact peak
-    for (let i = 2; i < buf.length; i++) {
-      if (buf[i] > impactThreshold) {
-        // Check that ≥2 of the preceding samples were free-fall
-        const preceding = buf.slice(Math.max(0, i - 5), i);
-        const freefallCount = preceding.filter(g => g < FREEFALL_THRESHOLD).length;
-        if (freefallCount >= 2) {
-          freefallDetected = true;
-          impactIdx = i;
-          peakG = Math.max(peakG, buf[i]);
-          break;
-        }
-      }
-    }
-
-    if (impactIdx === -1) {
-      return { detected: false, peakG, freefallDetected: false, stillnessDetected: false };
-    }
-
-    // Check stillness after impact
-    const post = buf.slice(impactIdx + 1);
-    if (post.length < STILLNESS_WINDOW) {
-      // Not enough samples yet after impact — inconclusive
-      return { detected: false, peakG, freefallDetected, stillnessDetected: false };
-    }
-
-    const stillSamples = post.slice(0, STILLNESS_WINDOW);
-    const meanPost = this._mean(stillSamples);
-    const stillnessDetected = meanPost < STILLNESS_THRESHOLD;
-
-    return {
-      detected: freefallDetected && stillnessDetected,
-      peakG,
-      freefallDetected,
-      stillnessDetected,
-    };
-  }
-
-  // ── Inference data ──────────────────────────────────────────────────────────
+  // ── Inference data for 1D-CNN ────────────────────────────────────────────
 
   static getWindow() { return this.buffer; }
   static isBufferFull() { return this.buffer.length === this.WINDOW_SIZE; }
-  static clearBuffer() { this.buffer = []; this.gBuffer = []; }
 
-  /**
-   * Z-score normalised window for 1D-CNN inference.
-   * Output shape: [100, 6]
-   */
+  static clearBuffer() {
+    this.buffer = [];
+    this.gBuffer = [];
+    this._resetStateMachine();
+  }
+
   static getInferenceData(): number[][] | null {
     if (!this.isBufferFull()) return null;
-
     const numFeatures = 6;
-    const normalized  = this.buffer.map(row => [...row]);
-
+    const normalized = this.buffer.map(row => [...row]);
     for (let col = 0; col < numFeatures; col++) {
       const values = this.buffer.map(row => row[col]);
       const mean   = this._mean(values);
@@ -144,11 +182,8 @@ export class SignalService {
         normalized[row][col] = (normalized[row][col] - mean) / std;
       }
     }
-
     return normalized;
   }
-
-  // ── Private helpers ─────────────────────────────────────────────────────────
 
   private static _mean(arr: number[]): number {
     return arr.reduce((s, v) => s + v, 0) / arr.length;

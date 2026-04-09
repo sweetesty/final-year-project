@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMotionUsageDescription": "Allow Vitals Fusion to access motion data for fall detection.",
+        "NSAccelerometerUsageDescription": "Allow Vitals Fusion to access the accelerometer for health monitoring."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,6 +41,12 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "Allow Vitals Fusion to access the microphone for emergency voice commands."
         }
       ]
     ],

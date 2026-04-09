@@ -1,8 +1,8 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -23,56 +23,56 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: themeColors.card,
           borderTopColor: themeColors.border,
-        }
-      }}>
-      
-      {/* Home Tab (Patient Agent) */}
+        },
+      }}
+    >
+      {/* Home Tab (Patient) */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Intelligence',
-          href: isDoctor ? null : '/', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Home',
+          href: isDoctor ? null : '/',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="home" size={size} color={color} />,
         }}
       />
 
-      {/* Doctor tab (For Doctors) */}
+      {/* Doctor tab */}
       <Tabs.Screen
         name="doctor"
         options={{
           title: 'Patients',
-          href: isDoctor ? '/doctor' : null, // Hide for Patient
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          href: isDoctor ? '/doctor' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
         }}
       />
 
-      {/* Medication tab (For Patients) */}
+      {/* Medication tab (Patient) */}
       <Tabs.Screen
         name="medication"
         options={{
           title: 'Medication',
-          href: isDoctor ? null : '/medication', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="pills.fill" color={color} />,
+          href: isDoctor ? null : '/medication',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="medication" size={size} color={color} />,
         }}
       />
 
-      {/* AI Companion tab (For Patients) */}
+      {/* AI Companion tab (Patient) */}
       <Tabs.Screen
         name="ai-chat"
         options={{
-          title: 'AI Companion',
-          href: isDoctor ? null : '/ai-chat', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles.fill" color={color} />,
+          title: 'AI Chat',
+          href: isDoctor ? null : '/ai-chat',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="smart-toy" size={size} color={color} />,
         }}
       />
 
-      {/* Pharmacy / Shop tab */}
+      {/* Pharmacy / Shop tab (Patient) */}
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Pharmacy',
           href: isDoctor ? null : '/explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="storefront.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="local-pharmacy" size={size} color={color} />,
         }}
       />
     </Tabs>

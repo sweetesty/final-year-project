@@ -20,10 +20,22 @@ export const useAuthViewModel = () => {
 
     fetchSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session?.user?.user_metadata?.role) {
-        setRole(session.user.user_metadata.role);
+      if (session?.user) {
+        const userRole = session.user.user_metadata?.role ?? 'patient';
+        const fullName = session.user.user_metadata?.full_name ?? '';
+        setRole(userRole);
+
+        // On SIGNED_IN after signup, ensure profile exists (trigger may have run,
+        // but upsert here is safe because auth.uid() is now set)
+        if (_event === 'SIGNED_IN') {
+          await supabase.from('profiles').upsert({
+            id: session.user.id,
+            full_name: fullName,
+            role: userRole,
+          }, { onConflict: 'id', ignoreDuplicates: true });
+        }
       } else {
         setRole(null);
       }
@@ -33,7 +45,6 @@ export const useAuthViewModel = () => {
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string = '', userRole: 'patient' | 'doctor' = 'patient') => {
-    // 1. Create auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -42,21 +53,9 @@ export const useAuthViewModel = () => {
       },
     });
     if (error) throw error;
-
-    // 2. Manually upsert the profile (more reliable than relying on DB trigger)
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: data.user.id,
-          full_name: fullName,
-          role: userRole,
-        });
-      if (profileError) {
-        console.warn('[signUp] Profile upsert failed (trigger may have handled it):', profileError.message);
-      }
-    }
-
+    // Profile is created by the DB trigger (handle_new_user).
+    // We do NOT upsert here — auth.uid() is not yet set in the session
+    // so RLS would block the insert.
     return data;
   };
 

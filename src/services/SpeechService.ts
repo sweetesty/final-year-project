@@ -10,9 +10,9 @@ export class SpeechService {
 
     this.isSpeaking = true;
     Speech.speak(text, {
-      language: 'en-US',
-      pitch: 1.0,
-      rate: 0.9,
+      language: 'en-GB',   // British English — warmer, more natural on iOS/Android
+      pitch: 1.05,         // Very slightly above neutral — less monotone
+      rate: 0.82,          // Slower than default — more conversational, less rushed
       onDone: () => { this.isSpeaking = false; },
       onError: () => { this.isSpeaking = false; },
     });

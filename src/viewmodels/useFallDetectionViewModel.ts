@@ -8,7 +8,6 @@ import { SmsService } from '../services/SmsService';
 import { supabase } from '../services/SupabaseService';
 import { AiModelService } from '../services/AiModelService';
 import { SignalService } from '../services/SignalService';
-import { OpenAiService } from '../services/OpenAiService';
 
 const RESPONSE_WINDOW_MS = 20_000;
 
@@ -111,18 +110,13 @@ export const useFallDetectionViewModel = (
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
-    // Voice triage
-    try {
-      const triage = await OpenAiService.getEmergencyTriage(
-        'No voice input',
-        `Peak G-Force: ${peakG.toFixed(2)}G`,
-      );
-      SpeechService.speak(triage);
-    } catch {
-      SpeechService.speak(
-        `${patientName}, are you okay? I detected a possible fall. I will alert your contacts in 20 seconds unless you cancel.`,
-      );
-    }
+    // Voice triage — local phrases, no API call (avoids quota errors + zero latency)
+    const triagePhrases = [
+      `${patientName}, I detected a fall. Are you okay? If you need help, stay still. I'll alert your contacts in 20 seconds. Tap cancel if you're fine.`,
+      `Hey ${patientName}, it looks like you may have fallen. Please don't worry, I'm here. Tap the cancel button if you're alright, otherwise I'll call for help shortly.`,
+      `${patientName}, are you okay? I noticed a sudden impact. Stay calm — I'm giving you 20 seconds to let me know you're fine before I alert your emergency contacts.`,
+    ];
+    SpeechService.speak(triagePhrases[Math.floor(Math.random() * triagePhrases.length)]);
 
     timerRef.current = setTimeout(() => { triggerEmergency(); }, RESPONSE_WINDOW_MS);
   }, [patientName, triggerEmergency]);

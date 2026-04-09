@@ -58,7 +58,7 @@ const PRODUCTS: Product[] = [
   // ── Pain Relief ──────────────────────────────────────────────────────────
   {
     id: 'p1', name: 'Paracetamol 500mg', brand: 'PharmaCare', category: 'pain',
-    price: 4.99, unit: '24 tablets', rating: 4.8, reviews: 2341,
+    price: 1500, unit: '24 tablets', rating: 4.8, reviews: 2341,
     badge: 'Best Seller', badgeColor: '#FF6B8A',
     description: 'Fast-acting paracetamol for headaches, fever and mild pain relief. Suitable for adults and children over 12.',
     image: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&q=80',
@@ -66,7 +66,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'p2', name: 'Ibuprofen 400mg', brand: 'Nurofen+', category: 'pain',
-    price: 6.49, unit: '16 tablets', rating: 4.7, reviews: 1892,
+    price: 2200, unit: '16 tablets', rating: 4.7, reviews: 1892,
     badge: 'Popular', badgeColor: '#FA709A',
     description: 'Anti-inflammatory ibuprofen for muscle pain, joint pain, period pain and fever.',
     image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=300&q=80',
@@ -74,7 +74,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'p3', name: 'Aspirin 300mg', brand: 'Bayer', category: 'pain',
-    price: 3.99, unit: '32 tablets', rating: 4.5, reviews: 987,
+    price: 1200, unit: '32 tablets', rating: 4.5, reviews: 987,
     description: 'Classic aspirin tablet for pain, inflammation and fever.',
     image: 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80',
     gradient: ['#a18cd1', '#fbc2eb'],
@@ -82,7 +82,7 @@ const PRODUCTS: Product[] = [
   // ── Cardiac ──────────────────────────────────────────────────────────────
   {
     id: 'h1', name: 'Amlodipine 5mg', brand: 'Pfizer', category: 'heart',
-    price: 12.99, unit: '30 tablets', rating: 4.9, reviews: 543,
+    price: 4500, unit: '30 tablets', rating: 4.9, reviews: 543,
     badge: 'Rx Grade', badgeColor: '#FF4757',
     description: 'Calcium channel blocker for managing high blood pressure and angina.',
     image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=300&q=80',
@@ -90,7 +90,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'h2', name: 'Omega-3 1000mg', brand: 'OceanHealth', category: 'heart',
-    price: 15.49, unit: '60 softgels', rating: 4.6, reviews: 1204,
+    price: 5500, unit: '60 softgels', rating: 4.6, reviews: 1204,
     badge: 'Heart Health', badgeColor: '#FF6B8A',
     description: 'High-potency fish oil softgels for cardiovascular and brain health support.',
     image: 'https://images.unsplash.com/photo-1585435557343-3b092031a831?w=300&q=80',
@@ -99,7 +99,7 @@ const PRODUCTS: Product[] = [
   // ── Vitamins ─────────────────────────────────────────────────────────────
   {
     id: 'v1', name: 'Vitamin D3 1000IU', brand: 'SunHealth', category: 'vitamins',
-    price: 8.99, unit: '90 tablets', rating: 4.8, reviews: 3201,
+    price: 3200, unit: '90 tablets', rating: 4.8, reviews: 3201,
     badge: 'Top Rated', badgeColor: '#43E97B',
     description: 'Essential vitamin D3 for bone health, immune function and mood support.',
     image: 'https://images.unsplash.com/photo-1612277795421-9bc7706a4a34?w=300&q=80',
@@ -107,14 +107,14 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'v2', name: 'Vitamin C 1000mg', brand: 'NatureWise', category: 'vitamins',
-    price: 7.49, unit: '60 tablets', rating: 4.7, reviews: 2876,
+    price: 2800, unit: '60 tablets', rating: 4.7, reviews: 2876,
     description: 'High-strength vitamin C antioxidant for immune support and skin health.',
     image: 'https://images.unsplash.com/photo-1576671081837-49000212a370?w=300&q=80',
     gradient: ['#f7971e', '#ffd200'],
   },
   {
     id: 'v3', name: 'Senior Multivitamin', brand: 'Centrum Silver', category: 'vitamins',
-    price: 18.99, unit: '100 tablets', rating: 4.6, reviews: 1543,
+    price: 6800, unit: '100 tablets', rating: 4.6, reviews: 1543,
     badge: 'Senior Formula', badgeColor: '#6C63FF',
     description: 'Complete daily multivitamin formulated specifically for adults over 50.',
     image: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?w=300&q=80',
@@ -123,7 +123,7 @@ const PRODUCTS: Product[] = [
   // ── Diabetes ─────────────────────────────────────────────────────────────
   {
     id: 'd1', name: 'Metformin 500mg', brand: 'Glucophage', category: 'diabetes',
-    price: 9.99, unit: '60 tablets', rating: 4.7, reviews: 721,
+    price: 3500, unit: '60 tablets', rating: 4.7, reviews: 721,
     badge: 'Rx Grade', badgeColor: '#FF4757',
     description: 'Oral diabetes medication that helps control blood sugar levels in type 2 diabetes.',
     image: 'https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=300&q=80',
@@ -131,7 +131,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'd2', name: 'Blood Glucose Monitor', brand: 'Accu-Chek', category: 'diabetes',
-    price: 34.99, unit: 'Device + strips', rating: 4.9, reviews: 892,
+    price: 12500, unit: 'Device + strips', rating: 4.9, reviews: 892,
     badge: 'Device', badgeColor: '#A55EEA',
     description: 'Accurate blood glucose monitoring system with large display and 500-reading memory.',
     image: 'https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=300&q=80',
@@ -140,7 +140,7 @@ const PRODUCTS: Product[] = [
   // ── Cold & Flu ───────────────────────────────────────────────────────────
   {
     id: 'c1', name: 'Loratadine 10mg', brand: 'Claritin', category: 'cold',
-    price: 11.99, unit: '30 tablets', rating: 4.6, reviews: 1673,
+    price: 4200, unit: '30 tablets', rating: 4.6, reviews: 1673,
     badge: 'Non-Drowsy', badgeColor: '#4FACFE',
     description: '24-hour non-drowsy antihistamine for hay fever, allergies and hives.',
     image: 'https://images.unsplash.com/photo-1631549916768-4119b2e5f926?w=300&q=80',
@@ -148,7 +148,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'c2', name: 'Cold & Flu Relief', brand: 'Lemsip Max', category: 'cold',
-    price: 8.49, unit: '10 sachets', rating: 4.4, reviews: 987,
+    price: 2900, unit: '10 sachets', rating: 4.4, reviews: 987,
     description: 'Multi-symptom hot drink for fast relief from cold and flu symptoms.',
     image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=300&q=80',
     gradient: ['#2C3E50', '#4A90E2'],
@@ -156,7 +156,7 @@ const PRODUCTS: Product[] = [
   // ── Digestive ────────────────────────────────────────────────────────────
   {
     id: 'g1', name: 'Omeprazole 20mg', brand: 'Prilosec', category: 'digestive',
-    price: 13.99, unit: '28 capsules', rating: 4.8, reviews: 2109,
+    price: 4900, unit: '28 capsules', rating: 4.8, reviews: 2109,
     badge: 'Best Value', badgeColor: '#FAAD14',
     description: 'Proton pump inhibitor for heartburn, acid reflux and stomach ulcers.',
     image: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&q=80',
@@ -164,7 +164,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'g2', name: 'Probiotic Complex', brand: 'BioKult', category: 'digestive',
-    price: 22.99, unit: '60 capsules', rating: 4.7, reviews: 1432,
+    price: 8200, unit: '60 capsules', rating: 4.7, reviews: 1432,
     description: '14-strain live bacteria probiotic for gut health, digestion and immunity.',
     image: 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80',
     gradient: ['#43E97B', '#38F9D7'],
@@ -172,7 +172,7 @@ const PRODUCTS: Product[] = [
   // ── Devices ──────────────────────────────────────────────────────────────
   {
     id: 'dv1', name: 'Blood Pressure Monitor', brand: 'Omron M3', category: 'devices',
-    price: 49.99, unit: 'Device', rating: 4.9, reviews: 3421,
+    price: 18500, unit: 'Device', rating: 4.9, reviews: 3421,
     badge: 'Best Seller', badgeColor: '#A55EEA',
     description: 'Clinically validated upper-arm blood pressure monitor with irregular heartbeat detection.',
     image: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=300&q=80',
@@ -180,7 +180,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'dv2', name: 'Pulse Oximeter', brand: 'ChoiceMMed', category: 'devices',
-    price: 24.99, unit: 'Device', rating: 4.8, reviews: 2156,
+    price: 9000, unit: 'Device', rating: 4.8, reviews: 2156,
     badge: 'Popular', badgeColor: '#4FACFE',
     description: 'Fingertip SpO2 and pulse rate monitor with colour LED display and lanyard.',
     image: 'https://images.unsplash.com/photo-1628771065518-0d82f1938462?w=300&q=80',
@@ -270,7 +270,7 @@ export default function PharmacyScreen() {
 
   const handleCheckout = () => Alert.alert(
     'Order Placed! 🎉',
-    `${cartCount} item(s) — £${cartTotal.toFixed(2)}\nYour pharmacy will prepare your order shortly.`,
+    `${cartCount} item(s) — ₦${cartTotal.toLocaleString()}\nYour pharmacy will prepare your order shortly.`,
     [{ text: 'OK', onPress: () => setCart({}) }]
   );
 
@@ -291,7 +291,7 @@ export default function PharmacyScreen() {
             </View>
           </LinearGradient>
           <View style={[styles.cartFabLabel, { backgroundColor: '#6C63FF' }]}>
-            <Text style={styles.cartFabLabelText}>£{cartTotal.toFixed(2)} — Checkout</Text>
+            <Text style={styles.cartFabLabelText}>₦{cartTotal.toLocaleString()} — Checkout</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -417,7 +417,7 @@ export default function PharmacyScreen() {
                         <Text style={[styles.productRatingText, { color: themeColors.muted }]}>{product.rating} ({product.reviews.toLocaleString()})</Text>
                       </View>
                       <View style={styles.productFooter}>
-                        <Text style={[styles.productPrice, { color: themeColors.tint }]}>£{product.price.toFixed(2)}</Text>
+                        <Text style={[styles.productPrice, { color: themeColors.tint }]}>₦{product.price.toLocaleString()}</Text>
                         {qty === 0 ? (
                           <TouchableOpacity style={[styles.addBtn, { backgroundColor: themeColors.tint }]} onPress={() => addToCart(product.id)}>
                             <Text style={styles.addBtnText}>+ Add</Text>
@@ -477,7 +477,7 @@ export default function PharmacyScreen() {
                 </View>
                 <Text style={[styles.modalDesc, { color: themeColors.muted }]}>{selectedProduct.description}</Text>
                 <View style={styles.modalFooter}>
-                  <Text style={[styles.modalPrice, { color: themeColors.tint }]}>£{selectedProduct.price.toFixed(2)}</Text>
+                  <Text style={[styles.modalPrice, { color: themeColors.tint }]}>₦{selectedProduct.price.toLocaleString()}</Text>
                   {(cart[selectedProduct.id] ?? 0) === 0 ? (
                     <TouchableOpacity
                       style={[styles.modalAddBtn, { backgroundColor: themeColors.tint }]}

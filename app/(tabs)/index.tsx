@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -18,13 +19,11 @@ import Animated, {
   withTiming,
   withSequence,
   withSpring,
-  interpolate,
-  Extrapolate,
+  FadeIn,
   FadeInDown,
-  FadeInUp,
-  ZoomIn,
+  FadeInRight,
 } from 'react-native-reanimated';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SpeechService } from '@/src/services/SpeechService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -32,348 +31,390 @@ import { useFallDetectionViewModel } from '@/src/viewmodels/useFallDetectionView
 import { DoctorService } from '@/src/services/DoctorService';
 import { VitalsService } from '@/src/services/VitalsService';
 
-const { width, height } = Dimensions.get('window');
-const CARD_WIDTH = (width - Spacing.lg * 2 - Spacing.md) / 2;
+const { width } = Dimensions.get('window');
 
-// ─── Vitals card data ────────────────────────────────────────────────────────
-type VitalKey = 'heartRate' | 'spo2' | 'steps' | 'activeTime';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const VITAL_META: Record<VitalKey, { label: string; unit: string; icon: string; gradientLight: [string, string]; gradientDark: [string, string] }> = {
-  heartRate: { label: 'Heart Rate', unit: 'BPM', icon: '♥', gradientLight: ['#FF6B8A', '#FF4757'], gradientDark: ['#FF6B8A', '#C0392B'] },
-  spo2:      { label: 'Blood Oxygen', unit: '%', icon: '◉', gradientLight: ['#4FACFE', '#00F2FE'], gradientDark: ['#2C7BE5', '#00C6FB'] },
-  steps:     { label: 'Steps', unit: 'steps', icon: '◈', gradientLight: ['#43E97B', '#38F9D7'], gradientDark: ['#11998E', '#38EF7D'] },
-  activeTime:{ label: 'Active Time', unit: '', icon: '◆', gradientLight: ['#FA709A', '#FEE140'], gradientDark: ['#F5AF19', '#F12711'] },
-};
+type Vitals = { heartRate: number; spo2: number; steps: number; activeMin: number };
 
-// ─── Quick-action items ───────────────────────────────────────────────────────
-const QUICK_ACTIONS = [
-  { icon: '🗺️', label: 'Live Map', route: '/live-tracking', color: '#6C63FF' },
-  { icon: '💊', label: 'Meds', route: '/medication', color: '#FF6B8A' },
-  { icon: '🚨', label: 'Emergency', route: '/emergency-contacts', color: '#FF4757' },
-  { icon: '⚕️', label: 'My Doctor', route: '/(tabs)/doctor', color: '#43E97B' },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export default function Dashboard() {
+function hour() { return new Date().getHours(); }
+function greeting() {
+  const h = hour();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+function hrZone(hr: number): { label: string; color: string; bg: string } {
+  if (hr < 60) return { label: 'Low',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' };
+  if (hr > 100) return { label: 'High',  color: '#EF4444', bg: 'rgba(239,68,68,0.15)' };
+  return          { label: 'Normal',     color: '#10B981', bg: 'rgba(16,185,129,0.15)' };
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function LiveDot({ color }: { color: string }) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.value = withRepeat(withSequence(withTiming(0.3, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
+  }, []);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }, style]} />;
+}
+
+function VitalTile({
+  icon, value, unit, label, color, delay,
+}: { icon: string; value: string | number; unit: string; label: string; color: string; delay: number }) {
+  const isDark = useColorScheme() === 'dark';
+  return (
+    <Animated.View entering={FadeInRight.delay(delay).duration(420)} style={[styles.vitalTile, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
+      <View style={[styles.vitalTileIcon, { backgroundColor: color + '18' }]}>
+        <MaterialIcons name={icon as any} size={20} color={color} />
+      </View>
+      <Text style={[styles.vitalTileValue, { color: isDark ? '#F8FAFC' : '#1E293B' }]}>{value}</Text>
+      <Text style={[styles.vitalTileUnit, { color: color }]}>{unit}</Text>
+      <Text style={[styles.vitalTileLabel, { color: isDark ? '#64748B' : '#94A3B8' }]}>{label}</Text>
+    </Animated.View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const C = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
   const { session } = useAuthViewModel();
-  const patientId = session?.user?.id ?? '';
-  const patientName = session?.user?.user_metadata?.full_name ?? 'there';
-  const firstName = patientName.split(' ')[0];
+
+  const patientId   = session?.user?.id ?? '';
+  const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
+  const firstName   = patientName.split(' ')[0];
 
   const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientId, patientName);
 
-  const [patientCode, setPatientCode] = useState('------');
-  const [vitals, setVitals] = useState({ heartRate: 72, spo2: 98, steps: 1240, activeTime: '2h 15m' });
+  const [patientCode, setPatientCode] = useState('––– –––');
+  const [vitals, setVitals] = useState<Vitals>({ heartRate: 72, spo2: 98, steps: 1240, activeMin: 42 });
 
-  // Animations
-  const orbScale = useSharedValue(1);
-  const orbOpacity = useSharedValue(0.6);
-  const statusPulse = useSharedValue(1);
-  const heartBeat = useSharedValue(1);
-  const alertScale = useSharedValue(0);
-
-  // Orb ambient pulse
+  // Fall alert spring
+  const alertY = useSharedValue(900);
   useEffect(() => {
-    orbScale.value = withRepeat(withSequence(withTiming(1.15, { duration: 2000 }), withTiming(1, { duration: 2000 })), -1, true);
-    orbOpacity.value = withRepeat(withSequence(withTiming(1, { duration: 2000 }), withTiming(0.5, { duration: 2000 })), -1, true);
-    statusPulse.value = withRepeat(withSequence(withTiming(1.05, { duration: 800 }), withTiming(1, { duration: 800 })), -1, true);
-    heartBeat.value = withRepeat(withSequence(withTiming(1.2, { duration: 300 }), withTiming(1, { duration: 300 }), withTiming(1.1, { duration: 200 }), withTiming(1, { duration: 700 })), -1, true);
-  }, []);
-
-  // Fall alert scale animation
-  useEffect(() => {
-    alertScale.value = fallState === 'user_response_window'
-      ? withSpring(1, { damping: 12 })
-      : withTiming(0, { duration: 200 });
+    alertY.value = fallState === 'user_response_window'
+      ? withSpring(0, { damping: 18 })
+      : withTiming(900, { duration: 300 });
   }, [fallState]);
-
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: orbScale.value }],
-    opacity: orbOpacity.value,
-  }));
-  const orbInnerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(orbScale.value, [1, 1.15], [1, 0.95], Extrapolate.CLAMP) }],
-  }));
-  const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: heartBeat.value }] }));
-  const alertStyle = useAnimatedStyle(() => ({ transform: [{ scale: alertScale.value }] }));
+  const alertStyle = useAnimatedStyle(() => ({ transform: [{ translateY: alertY.value }] }));
 
   // Patient code
   useEffect(() => {
-    if (patientId) {
-      DoctorService.ensurePatientCode(patientId)
-        .then(code => { if (code) setPatientCode(code.replace(/(\d{3})(\d{3})/, '$1 $2')); })
-        .catch(console.error);
-    }
+    if (!patientId) return;
+    DoctorService.ensurePatientCode(patientId)
+      .then(c => { if (c) setPatientCode(c.replace(/(\d{3})(\d{3})/, '$1 $2')); })
+      .catch(console.error);
   }, [patientId]);
 
-  // Vitals simulation + persistence
+  // Vitals simulation
   useEffect(() => {
-    let stepAcc = vitals.steps;
-    const interval = setInterval(() => {
-      const newHr = 68 + Math.floor(Math.random() * 14);
-      const newSpo2 = 96 + Math.floor(Math.random() * 4);
-      stepAcc += Math.floor(Math.random() * 20);
-      setVitals(prev => ({ ...prev, heartRate: newHr, spo2: newSpo2, steps: stepAcc }));
-      if (newHr > 95) {
-        SpeechService.speak(`${firstName}, your heart rate is ${newHr} BPM. Please rest.`);
-      }
-      if (patientId) {
-        VitalsService.logVitals({ patientId, heartRate: newHr, spo2: newSpo2, steps: stepAcc, timestamp: new Date().toISOString() }).catch(console.error);
-      }
+    let steps = vitals.steps;
+    let mins  = vitals.activeMin;
+    const id  = setInterval(() => {
+      const hr   = 68 + Math.floor(Math.random() * 16);
+      const spo2 = 96 + Math.floor(Math.random() * 4);
+      steps += Math.floor(Math.random() * 18);
+      mins  += 1;
+      setVitals({ heartRate: hr, spo2, steps, activeMin: mins });
+      if (hr > 95) SpeechService.speak(`${firstName}, your heart rate is ${hr} BPM. Please rest.`);
+      if (patientId) VitalsService.logVitals({ patientId, heartRate: hr, spo2, steps, timestamp: new Date().toISOString() }).catch(console.error);
     }, 15000);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [patientId, firstName]);
 
-  const getHrStatus = (hr: number) => hr < 60 ? { label: 'Low', color: '#FAAD14' } : hr > 100 ? { label: 'High', color: '#FF4757' } : { label: 'Normal', color: '#43E97B' };
-  const hrStatus = getHrStatus(vitals.heartRate);
+  const zone = hrZone(vitals.heartRate);
 
-  // ─── Background gradient colours ────────────────────────────────────────────
-  const bgGrad: [string, string, string] = isDark
-    ? ['#0A0E1A', '#0F1729', '#0A0E1A']
-    : ['#EEF4FF', '#F8FAFF', '#EEF4FF'];
-
+  // ─── Layout ─────────────────────────────────────────────────────────────────
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
-      <LinearGradient colors={bgGrad} style={StyleSheet.absoluteFill} />
+    <View style={[styles.root, { backgroundColor: isDark ? '#080C18' : '#F4F7FE' }]}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* ── Fall Alert Overlay ─────────────────────────────────────── */}
-      {fallState === 'user_response_window' && (
-        <Animated.View style={[styles.fallOverlay, alertStyle]}>
-          <LinearGradient colors={['#C0392B', '#E74C3C']} style={styles.fallGradient}>
-            <Text style={styles.fallIcon}>⚠</Text>
-            <Text style={styles.fallTitle}>Fall Detected</Text>
-            <Text style={styles.fallSubtitle}>Are you okay? Emergency alert in{'\n'}20 seconds if no response.</Text>
-            <TouchableOpacity style={styles.fallCancelBtn} onPress={cancelAlert}>
-              <Text style={styles.fallCancelText}>I'm OK — Cancel Alert</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </Animated.View>
-      )}
-
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: Platform.OS === 'ios' ? 60 : 48 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Header ──────────────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(0).duration(500)} style={styles.header}>
-          <View>
-            <Text style={[styles.greeting, { color: isDark ? '#94A3B8' : '#64748B' }]}>Good {getTimeOfDay()}</Text>
-            <Text style={[styles.name, { color: themeColors.text }]}>{firstName} 👋</Text>
+      {/* ── Fall Alert Sheet (slides up from bottom) ──────────────────── */}
+      <Animated.View style={[styles.fallSheet, alertStyle]}>
+        <LinearGradient colors={['#7F1D1D', '#DC2626']} style={styles.fallSheetInner}>
+          <View style={styles.fallSheetTop}>
+            <MaterialIcons name="warning" size={32} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fallSheetTitle}>Fall Detected</Text>
+              <Text style={styles.fallSheetSub}>Emergency alert in 20 seconds</Text>
+            </View>
           </View>
-          <Animated.View style={[styles.statusBadge, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)' }, { transform: [{ scale: statusPulse }] }]}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusBadgeText}>Active</Text>
-          </Animated.View>
-        </Animated.View>
-
-        {/* ── Central AI Orb ──────────────────────────────────────── */}
-        <Animated.View entering={ZoomIn.delay(100).duration(600)} style={styles.orbSection}>
-          {/* Outer glow rings */}
-          <Animated.View style={[styles.orbRing3, { borderColor: themeColors.tint + '15' }, orbStyle]} />
-          <Animated.View style={[styles.orbRing2, { borderColor: themeColors.tint + '25' }, orbStyle]} />
-          <Animated.View style={[styles.orbRing1, { borderColor: themeColors.tint + '40' }, orbStyle]} />
-
-          {/* Main orb */}
-          <TouchableOpacity onPress={() => router.push('/ai-chat')} activeOpacity={0.9}>
-            <Animated.View style={orbInnerStyle}>
-              <LinearGradient
-                colors={isDark ? ['#1E40AF', '#3B82F6', '#60A5FA'] : ['#1D4ED8', '#3B82F6', '#60A5FA']}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.8, y: 1 }}
-                style={styles.orb}
-              >
-                <Text style={styles.orbEmoji}>🤖</Text>
-                <Text style={styles.orbLabel}>AI Companion</Text>
-                <Text style={styles.orbSub}>Tap to chat</Text>
-              </LinearGradient>
-            </Animated.View>
+          <TouchableOpacity style={styles.fallCancelBtn} onPress={cancelAlert}>
+            <Text style={styles.fallCancelText}>I'm OK — Cancel Alert</Text>
           </TouchableOpacity>
+        </LinearGradient>
+      </Animated.View>
 
-          {/* Monitoring status chip */}
-          <View style={[styles.monitorChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-            <View style={[styles.monitorDot, { backgroundColor: isUserActive ? '#FA709A' : '#43E97B' }]} />
-            <Text style={[styles.monitorText, { color: themeColors.muted }]}>
-              {isUserActive ? 'Active mode — elevated threshold' : 'Fall detection active'}
-            </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            HEADER  — dark card with gradient, name, time, status
+        ════════════════════════════════════════════════════════════════ */}
+        <LinearGradient
+          colors={isDark ? ['#0F1729', '#1A2744'] : ['#1D4ED8', '#2563EB']}
+          style={styles.headerCard}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        >
+          {/* Subtle grid pattern overlay */}
+          <View style={styles.headerGrid} pointerEvents="none">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <View key={i} style={[styles.headerGridLine, { top: i * 28 }]} />
+            ))}
           </View>
-        </Animated.View>
 
-        {/* ── Vitals ──────────────────────────────────────────────── */}
-        <Animated.View entering={FadeInUp.delay(200).duration(500)}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Live Vitals</Text>
-          <View style={styles.vitalsGrid}>
-            {(Object.entries(vitals) as [VitalKey, number | string][]).map(([key, value], i) => {
-              const meta = VITAL_META[key];
-              const gradColors = isDark ? meta.gradientDark : meta.gradientLight;
-              return (
-                <Animated.View key={key} entering={ZoomIn.delay(250 + i * 60).duration(400)}>
-                  <LinearGradient colors={gradColors as [string, string]} style={styles.vitalCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                    {key === 'heartRate' ? (
-                      <Animated.Text style={[styles.vitalIcon, heartStyle]}>{meta.icon}</Animated.Text>
-                    ) : (
-                      <Text style={styles.vitalIcon}>{meta.icon}</Text>
-                    )}
-                    <Text style={styles.vitalValue}>{value}</Text>
-                    <Text style={styles.vitalUnit}>{meta.unit || meta.label}</Text>
-                    {key === 'heartRate' && (
-                      <View style={[styles.vitalStatus, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-                        <Text style={styles.vitalStatusText}>{hrStatus.label}</Text>
-                      </View>
-                    )}
-                  </LinearGradient>
-                </Animated.View>
-              );
-            })}
-          </View>
-        </Animated.View>
-
-        {/* ── Patient Code Card ────────────────────────────────────── */}
-        <Animated.View entering={FadeInUp.delay(350).duration(500)} style={styles.codeCardWrap}>
-          <LinearGradient
-            colors={isDark ? ['#1E293B', '#0F172A'] : ['#FFFFFF', '#F1F5FF']}
-            style={[styles.codeCard, { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(59,130,246,0.15)' }]}
-          >
-            <View style={styles.codeLeft}>
-              <View style={[styles.codeIconWrap, { backgroundColor: themeColors.tint + '20' }]}>
-                <Text style={styles.codeIcon}>🏥</Text>
-              </View>
-              <View>
-                <Text style={[styles.codeLabel, { color: themeColors.muted }]}>YOUR PATIENT CODE</Text>
-                <Text style={[styles.codeValue, { color: themeColors.tint }]}>{patientCode}</Text>
-                <Text style={[styles.codeHint, { color: themeColors.muted }]}>Share with your doctor</Text>
+          <Animated.View entering={FadeIn.delay(50).duration(500)} style={styles.headerTop}>
+            <View>
+              <Text style={styles.headerGreeting}>{greeting()}</Text>
+              <Text style={styles.headerName}>{firstName}</Text>
+            </View>
+            <View style={styles.headerRight}>
+              <View style={styles.monitorBadge}>
+                <LiveDot color={isUserActive ? '#FCD34D' : '#34D399'} />
+                <Text style={styles.monitorBadgeText}>
+                  {isUserActive ? 'Active' : 'Monitoring'}
+                </Text>
               </View>
             </View>
+          </Animated.View>
+
+          {/* Heart rate highlight row inside header */}
+          <Animated.View entering={FadeInDown.delay(150).duration(450)} style={styles.headerHR}>
+            <View style={styles.headerHRLeft}>
+              <MaterialIcons name="favorite" size={16} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.headerHRLabel}>Heart Rate</Text>
+              <View style={[styles.headerHRBadge, { backgroundColor: zone.bg }]}>
+                <Text style={[styles.headerHRBadgeText, { color: zone.color }]}>{zone.label}</Text>
+              </View>
+            </View>
+            <View style={styles.headerHRValue}>
+              <Text style={styles.headerHRNumber}>{vitals.heartRate}</Text>
+              <Text style={styles.headerHRUnit}>BPM</Text>
+            </View>
+          </Animated.View>
+
+          {/* Patient code strip */}
+          <Animated.View entering={FadeInDown.delay(220).duration(450)} style={styles.codeStrip}>
+            <View style={styles.codeStripLeft}>
+              <Text style={styles.codeStripLabel}>PATIENT CODE</Text>
+              <Text style={styles.codeStripValue}>{patientCode}</Text>
+            </View>
             <TouchableOpacity
-              style={[styles.chatBtn, { backgroundColor: themeColors.tint }]}
-              onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: 'doc-123', partnerName: 'Dr. Smith' } })}
+              style={styles.codeStripBtn}
+              onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: 'doc-123', partnerName: 'Doctor' } })}
             >
-              <Text style={styles.chatBtnText}>💬</Text>
-              <Text style={styles.chatBtnLabel}>Doctor</Text>
+              <MaterialIcons name="chat" size={16} color="#fff" />
+              <Text style={styles.codeStripBtnText}>Message Doctor</Text>
             </TouchableOpacity>
-          </LinearGradient>
+          </Animated.View>
+        </LinearGradient>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            VITALS ROW  — horizontal scroll of 4 tiles
+        ════════════════════════════════════════════════════════════════ */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>Live Vitals</Text>
+            <View style={styles.sectionLive}>
+              <LiveDot color="#10B981" />
+              <Text style={[styles.sectionLiveText, { color: C.muted }]}>Real-time</Text>
+            </View>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vitalsRow}>
+            <VitalTile icon="favorite"       value={vitals.heartRate} unit="BPM"  label="Heart Rate"   color="#EF4444" delay={0}   />
+            <VitalTile icon="air"            value={`${vitals.spo2}%`} unit="SpO2" label="Blood Oxygen"  color="#3B82F6" delay={60}  />
+            <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit="steps" label="Steps Today" color="#10B981" delay={120} />
+            <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label="Active Time"  color="#8B5CF6" delay={180} />
+          </ScrollView>
+        </View>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            AI COMPANION  — full-width banner, not a circle
+        ════════════════════════════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(300).duration(450)} style={styles.section}>
+          <TouchableOpacity onPress={() => router.push('/ai-chat')} activeOpacity={0.88}>
+            <LinearGradient
+              colors={isDark ? ['#1E1B4B', '#312E81'] : ['#4F46E5', '#6D28D9']}
+              style={styles.aiBanner}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.aiBannerLeft}>
+                <View style={styles.aiBannerIconWrap}>
+                  <MaterialIcons name="smart-toy" size={26} color="#fff" />
+                </View>
+                <View>
+                  <Text style={styles.aiBannerTitle}>AI Health Companion</Text>
+                  <Text style={styles.aiBannerSub}>Ask anything about your health</Text>
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color="rgba(255,255,255,0.6)" />
+            </LinearGradient>
+          </TouchableOpacity>
         </Animated.View>
 
-        {/* ── Quick Actions ────────────────────────────────────────── */}
-        <Animated.View entering={FadeInUp.delay(450).duration(500)}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Quick Actions</Text>
+        {/* ═══════════════════════════════════════════════════════════════
+            QUICK ACTIONS  — 2 × 2 with labels below, no emoji
+        ════════════════════════════════════════════════════════════════ */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Quick Access</Text>
           <View style={styles.actionsGrid}>
-            {QUICK_ACTIONS.map((action, i) => (
-              <Animated.View key={action.label} entering={ZoomIn.delay(500 + i * 50).duration(350)}>
+            {[
+              { icon: 'location-on',    label: 'Live Map',     sub: 'Track location',  color: '#6366F1', route: '/live-tracking' },
+              { icon: 'medication',     label: 'Medications',  sub: 'Schedule & doses', color: '#EC4899', route: '/medication' },
+              { icon: 'phone-in-talk',  label: 'Emergency',   sub: 'SOS contacts',    color: '#EF4444', route: '/emergency-contacts' },
+              { icon: 'local-hospital', label: 'My Doctor',   sub: 'View profile',    color: '#10B981', route: '/(tabs)/doctor' },
+            ].map((a, i) => (
+              <Animated.View key={a.label} entering={FadeInDown.delay(360 + i * 50).duration(380)} style={{ width: (width - Spacing.lg * 2 - 12) / 2 }}>
                 <TouchableOpacity
-                  style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : action.color + '30' }]}
-                  onPress={() => router.push(action.route as Parameters<typeof router.push>[0])}
-                  activeOpacity={0.75}
+                  style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={() => router.push(a.route as any)}
+                  activeOpacity={0.78}
                 >
-                  <View style={[styles.actionIconWrap, { backgroundColor: action.color + '18' }]}>
-                    <Text style={styles.actionIcon}>{action.icon}</Text>
+                  <View style={[styles.actionIcon, { backgroundColor: a.color + '15' }]}>
+                    <MaterialIcons name={a.icon as any} size={22} color={a.color} />
                   </View>
-                  <Text style={[styles.actionLabel, { color: themeColors.text }]}>{action.label}</Text>
+                  <Text style={[styles.actionLabel, { color: C.text }]}>{a.label}</Text>
+                  <Text style={[styles.actionSub, { color: C.muted }]}>{a.sub}</Text>
                 </TouchableOpacity>
               </Animated.View>
             ))}
           </View>
+        </View>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            HEALTH SUMMARY  — clinical row with 3 key numbers
+        ════════════════════════════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(560).duration(400)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Summary</Text>
+          <View style={[styles.summaryCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
+            {[
+              { label: 'Resting HR',  value: `${vitals.heartRate} bpm`, icon: 'favorite',       color: '#EF4444' },
+              { label: 'Blood O₂',   value: `${vitals.spo2}%`,         icon: 'bubble-chart',   color: '#3B82F6' },
+              { label: 'Steps',      value: vitals.steps.toLocaleString(), icon: 'show-chart',  color: '#10B981' },
+            ].map((s, i) => (
+              <React.Fragment key={s.label}>
+                <View style={styles.summaryItem}>
+                  <MaterialIcons name={s.icon as any} size={18} color={s.color} />
+                  <Text style={[styles.summaryValue, { color: C.text }]}>{s.value}</Text>
+                  <Text style={[styles.summaryLabel, { color: C.muted }]}>{s.label}</Text>
+                </View>
+                {i < 2 && <View style={[styles.summaryDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }]} />}
+              </React.Fragment>
+            ))}
+          </View>
         </Animated.View>
 
-        {/* ── Health Insight Banner ────────────────────────────────── */}
-        <Animated.View entering={FadeInUp.delay(550).duration(500)} style={styles.insightWrap}>
-          <LinearGradient colors={isDark ? ['#1E293B', '#0F172A'] : ['#EFF6FF', '#DBEAFE']} style={[styles.insightCard, { borderColor: isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.3)' }]}>
-            <Text style={styles.insightEmoji}>💡</Text>
-            <View style={styles.insightText}>
-              <Text style={[styles.insightTitle, { color: themeColors.text }]}>Daily Insight</Text>
-              <Text style={[styles.insightBody, { color: themeColors.muted }]}>
-                Your heart rate has been {vitals.heartRate < 80 ? 'stable and healthy' : 'slightly elevated'} today. {vitals.steps > 1000 ? `Great work — ${vitals.steps.toLocaleString()} steps!` : 'Try a short walk to boost circulation.'}
-              </Text>
-            </View>
-          </LinearGradient>
+        {/* ═══════════════════════════════════════════════════════════════
+            INSIGHT STRIP  — one line, dynamic
+        ════════════════════════════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(640).duration(400)} style={[styles.section, { marginBottom: 8 }]}>
+          <View style={[styles.insightStrip, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.08)', borderColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.2)' }]}>
+            <MaterialIcons name="tips-and-updates" size={18} color="#3B82F6" />
+            <Text style={[styles.insightText, { color: isDark ? '#93C5FD' : '#1D4ED8' }]}>
+              {vitals.heartRate < 80
+                ? `Heart rate stable at ${vitals.heartRate} bpm — you're doing well today.`
+                : `Heart rate is elevated at ${vitals.heartRate} bpm — consider resting.`}
+            </Text>
+          </View>
         </Animated.View>
 
-        <View style={styles.bottomPad} />
       </ScrollView>
     </View>
   );
 }
 
-function getTimeOfDay() {
-  const h = new Date().getHours();
-  if (h < 12) return 'morning,';
-  if (h < 17) return 'afternoon,';
-  return 'evening,';
-}
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingHorizontal: Spacing.lg, paddingBottom: 32 },
-  bottomPad: { height: 24 },
 
-  // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl },
-  greeting: { fontSize: 14, fontWeight: '500', marginBottom: 2 },
-  name: { fontSize: 28, fontWeight: '800' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: BorderRadius.full },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  statusBadgeText: { fontSize: 13, fontWeight: '700', color: '#10B981' },
+  // ── Header card
+  headerCard: {
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    overflow: 'hidden',
+  },
+  headerGrid: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  headerGridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.04)' },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerGreeting: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500', marginBottom: 2 },
+  headerName: { color: '#fff', fontSize: 26, fontWeight: '800', letterSpacing: -0.3 },
+  headerRight: { alignItems: 'flex-end' },
+  monitorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 },
+  monitorBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-  // Orb
-  orbSection: { alignItems: 'center', marginBottom: Spacing.xl },
-  orbRing1: { position: 'absolute', width: 220, height: 220, borderRadius: 110, borderWidth: 1.5 },
-  orbRing2: { position: 'absolute', width: 270, height: 270, borderRadius: 135, borderWidth: 1 },
-  orbRing3: { position: 'absolute', width: 320, height: 320, borderRadius: 160, borderWidth: 0.5 },
-  orb: { width: 170, height: 170, borderRadius: 85, justifyContent: 'center', alignItems: 'center', ...Shadows.medium },
-  orbEmoji: { fontSize: 52, marginBottom: 4 },
-  orbLabel: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  orbSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
-  monitorChip: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.xl + 20, paddingHorizontal: 14, paddingVertical: 8, borderRadius: BorderRadius.full },
-  monitorDot: { width: 7, height: 7, borderRadius: 4 },
-  monitorText: { fontSize: 13 },
+  // HR row inside header
+  headerHR: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  headerHRLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerHRLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '500' },
+  headerHRBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
+  headerHRBadgeText: { fontSize: 11, fontWeight: '700' },
+  headerHRValue: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  headerHRNumber: { color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  headerHRUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '600' },
 
-  // Vitals
-  sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: Spacing.md },
-  vitalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xl },
-  vitalCard: { width: CARD_WIDTH, borderRadius: 20, padding: Spacing.md, minHeight: 130, justifyContent: 'center', ...Shadows.medium },
-  vitalIcon: { fontSize: 22, color: 'rgba(255,255,255,0.9)', marginBottom: 4 },
-  vitalValue: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  vitalUnit: { fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginTop: 2 },
-  vitalStatus: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.full },
-  vitalStatusText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  // Code strip
+  codeStrip: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  codeStripLeft: {},
+  codeStripLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
+  codeStripValue: { color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: 3 },
+  codeStripBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  codeStripBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  // Patient code card
-  codeCardWrap: { marginBottom: Spacing.xl },
-  codeCard: { borderRadius: 20, borderWidth: 1, padding: Spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...Shadows.light },
-  codeLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  codeIconWrap: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  codeIcon: { fontSize: 22 },
-  codeLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  codeValue: { fontSize: 22, fontWeight: '900', letterSpacing: 3, marginVertical: 2 },
-  codeHint: { fontSize: 10 },
-  chatBtn: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', ...Shadows.light },
-  chatBtnText: { fontSize: 20 },
-  chatBtnLabel: { color: '#fff', fontWeight: '700', fontSize: 11, marginTop: 2 },
+  // Section
+  section: { paddingHorizontal: Spacing.lg, marginTop: 24 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  sectionLive: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  sectionLiveText: { fontSize: 12 },
 
-  // Quick actions
-  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xl },
-  actionCard: { width: CARD_WIDTH, borderRadius: 18, borderWidth: 1, padding: Spacing.md, alignItems: 'center', gap: 10, ...Shadows.light },
-  actionIconWrap: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  actionIcon: { fontSize: 26 },
-  actionLabel: { fontSize: 13, fontWeight: '700' },
+  // Vitals tiles
+  vitalsRow: { gap: 10, paddingRight: Spacing.lg },
+  vitalTile: { width: 100, borderRadius: 16, padding: 14, alignItems: 'flex-start', ...Shadows.light },
+  vitalTileIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  vitalTileValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  vitalTileUnit: { fontSize: 11, fontWeight: '700', marginTop: 1 },
+  vitalTileLabel: { fontSize: 11, marginTop: 4 },
+
+  // AI banner
+  aiBanner: { borderRadius: 16, paddingHorizontal: 18, paddingVertical: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  aiBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  aiBannerIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  aiBannerTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  aiBannerSub: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 2 },
+
+  // Actions
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  actionCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 4, ...Shadows.light },
+  actionIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  actionLabel: { fontSize: 14, fontWeight: '700' },
+  actionSub: { fontSize: 11 },
+
+  // Summary card
+  summaryCard: { borderRadius: 16, borderWidth: 1, flexDirection: 'row', overflow: 'hidden', ...Shadows.light },
+  summaryItem: { flex: 1, alignItems: 'center', paddingVertical: 16, gap: 4 },
+  summaryValue: { fontSize: 15, fontWeight: '800' },
+  summaryLabel: { fontSize: 11 },
+  summaryDivider: { width: 1, marginVertical: 14 },
 
   // Insight
-  insightWrap: { marginBottom: Spacing.lg },
-  insightCard: { borderRadius: 20, borderWidth: 1, padding: Spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  insightEmoji: { fontSize: 28, marginTop: 2 },
-  insightText: { flex: 1 },
-  insightTitle: { fontSize: 15, fontWeight: '800', marginBottom: 4 },
-  insightBody: { fontSize: 13, lineHeight: 20 },
+  insightStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  insightText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '500' },
 
-  // Fall overlay
-  fallOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, justifyContent: 'center', alignItems: 'center' },
-  fallGradient: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl, gap: Spacing.lg },
-  fallIcon: { fontSize: 72, color: '#fff' },
-  fallTitle: { fontSize: 36, fontWeight: '900', color: '#fff' },
-  fallSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 24 },
-  fallCancelBtn: { backgroundColor: '#fff', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: BorderRadius.full, marginTop: Spacing.sm, ...Shadows.medium },
-  fallCancelText: { color: '#C0392B', fontWeight: '900', fontSize: 16 },
+  // Fall alert
+  fallSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 999, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  fallSheetInner: { padding: Spacing.lg, gap: 16 },
+  fallSheetTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  fallSheetTitle: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  fallSheetSub: { color: 'rgba(255,255,255,0.75)', fontSize: 13, marginTop: 2 },
+  fallCancelBtn: { backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  fallCancelText: { color: '#DC2626', fontSize: 16, fontWeight: '800' },
 });

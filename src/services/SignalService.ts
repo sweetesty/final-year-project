@@ -3,10 +3,9 @@ import { SensorData } from '../models/Vitals';
 // ─── Thresholds ───────────────────────────────────────────────────────────────
 const BASE_THRESHOLD      = 2.5;   // G — resting / sedentary impact trigger
 const ACTIVITY_THRESHOLD  = 3.2;   // G — raised when user is active
-const FREEFALL_THRESHOLD  = 0.6;   // G — below this counts as free-fall phase
-                                    //     (0.6 instead of 0.4 — hands-on drop)
-const STILLNESS_THRESHOLD = 1.3;   // G — below this = lying still after impact
-const STILLNESS_SAMPLES   = 10;    // consecutive still samples required (~500ms @ 20Hz)
+const FREEFALL_THRESHOLD  = 0.7;   // G — below this counts as free-fall phase
+const STILLNESS_THRESHOLD = 1.8;   // G — below this = still after impact (raised for surface vibration)
+const STILLNESS_SAMPLES   = 6;     // consecutive still samples required (~300ms @ 20Hz)
 const FREEFALL_SAMPLES    = 2;     // consecutive free-fall samples required
 
 const ACTIVITY_WINDOW      = 50;   // samples (~2.5s at 20Hz)
@@ -106,18 +105,15 @@ export class SignalService {
         break;
 
       case 'impact':
-        // Track peak during impact window (could be multiple high-G samples)
+        // Track peak — multiple bounces are fine, just keep the highest
         if (g > this.peakGSeen) this.peakGSeen = g;
 
         if (g < STILLNESS_THRESHOLD) {
+          // Starting to settle — move to stillness phase
           this.stillCount = 1;
           this.phase = 'stillness';
-        } else if (g > threshold * 1.5) {
-          // Another big spike — reset (e.g. bounced, not a fall)
-          this.phase = 'watching';
-          this.freefallCount = 0;
-          this.peakGSeen = 0;
         }
+        // Do NOT reset on secondary spikes (bounces) — stay in impact phase
         break;
 
       case 'stillness':
@@ -130,12 +126,11 @@ export class SignalService {
             this._resetStateMachine();
             if (this.fallDetectedCb) this.fallDetectedCb(peakG);
           }
-        } else if (g > threshold) {
-          // Person got up quickly or another impact — reset
+        } else if (g > STILLNESS_THRESHOLD * 2) {
+          // Very large spike after settling = person got up or second fall — reset fully
           this._resetStateMachine();
         } else {
-          // Brief movement — allow some tolerance, keep counting
-          this.stillCount = Math.max(0, this.stillCount - 1);
+          // Small movement — tolerate it, just don't count this sample
         }
         break;
     }

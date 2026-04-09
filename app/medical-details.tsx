@@ -3,11 +3,16 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { Stack, useRouter } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/src/services/SupabaseService';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
+
 
 export default function MedicalDetailsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
+  const { session } = useAuthViewModel();
+
 
   const [details, setDetails] = useState({
     bloodType: '',
@@ -18,11 +23,34 @@ export default function MedicalDetailsScreen() {
     emergencyContactPhone: '',
   });
 
-  const handleSave = () => {
-    // Logic to save to Supabase
-    alert('Medical details saved successfully!');
-    router.replace('/(tabs)');
+  const handleSave = async () => {
+    try {
+      if (!session?.user?.id) {
+        alert('You must be logged in to save details');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('medical_details')
+        .upsert({
+          patientid: session.user.id,
+          bloodType: details.bloodType,
+          allergies: details.allergies,
+          chronicConditions: details.chronicConditions,
+          currentMedications: details.currentMedications,
+        });
+
+      if (error) {
+        alert('Error saving details: ' + error.message);
+      } else {
+        alert('Medical details saved successfully!');
+        router.replace('/(tabs)');
+      }
+    } catch (err: any) {
+      alert('An unexpected error occurred: ' + err.message);
+    }
   };
+
 
   return (
     <KeyboardAvoidingView 

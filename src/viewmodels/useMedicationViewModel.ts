@@ -14,7 +14,7 @@ export const useMedicationViewModel = (patientId: string) => {
     const { data, error } = await supabase
       .from('medications')
       .select('*')
-      .eq('patientId', patientId);
+      .eq('patientid', patientId);
 
     if (error) console.error(error);
     else setMedications(data || []);
@@ -24,11 +24,11 @@ export const useMedicationViewModel = (patientId: string) => {
   const fetchTodayLogs = useCallback(async () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-    
+
     const { data, error } = await supabase
       .from('medication_logs')
       .select('*')
-      .eq('patientId', patientId)
+      .eq('patientid', patientId)
       .gte('takenAt', startOfDay.toISOString());
 
     if (error) console.error(error);
@@ -38,7 +38,7 @@ export const useMedicationViewModel = (patientId: string) => {
   const addMedication = async (newMed: NewMedication) => {
     const { data, error } = await supabase
       .from('medications')
-      .insert({ ...newMed, patientId })
+      .insert({ ...newMed, patientid: patientId })
       .select()
       .single();
 
@@ -53,11 +53,11 @@ export const useMedicationViewModel = (patientId: string) => {
   const logDose = async (medicationId: string, scheduledTime: string, status: 'taken' | 'skipped') => {
     try {
       await OfflineSyncService.write('medication_logs', 'insert', {
-        medicationId,
-        patientId,
+        medicationid: medicationId,
+        patientid: patientId,
         status,
-        scheduledTime,
-        takenAt: new Date().toISOString(),
+        scheduledtime: scheduledTime,
+        takenat: new Date().toISOString(),
       });
       await fetchTodayLogs();
     } catch (error: any) {

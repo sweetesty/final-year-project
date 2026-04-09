@@ -61,7 +61,7 @@ const PRODUCTS: Product[] = [
     price: 4.99, unit: '24 tablets', rating: 4.8, reviews: 2341,
     badge: 'Best Seller', badgeColor: '#FF6B8A',
     description: 'Fast-acting paracetamol for headaches, fever and mild pain relief. Suitable for adults and children over 12.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Paracetamol-tablets.jpg/320px-Paracetamol-tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&q=80',
     gradient: ['#FF6B8A', '#FF4757'],
   },
   {
@@ -69,14 +69,14 @@ const PRODUCTS: Product[] = [
     price: 6.49, unit: '16 tablets', rating: 4.7, reviews: 1892,
     badge: 'Popular', badgeColor: '#FA709A',
     description: 'Anti-inflammatory ibuprofen for muscle pain, joint pain, period pain and fever.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Ibuprofen_200mg_Tablets.jpg/320px-Ibuprofen_200mg_Tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=300&q=80',
     gradient: ['#FA709A', '#FEE140'],
   },
   {
     id: 'p3', name: 'Aspirin 300mg', brand: 'Bayer', category: 'pain',
     price: 3.99, unit: '32 tablets', rating: 4.5, reviews: 987,
     description: 'Classic aspirin tablet for pain, inflammation and fever.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Aspirin-Bayer.jpg/320px-Aspirin-Bayer.jpg',
+    image: 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80',
     gradient: ['#a18cd1', '#fbc2eb'],
   },
   // ── Cardiac ──────────────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ const PRODUCTS: Product[] = [
     price: 12.99, unit: '30 tablets', rating: 4.9, reviews: 543,
     badge: 'Rx Grade', badgeColor: '#FF4757',
     description: 'Calcium channel blocker for managing high blood pressure and angina.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Amlodipine_tablets.jpg/320px-Amlodipine_tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=300&q=80',
     gradient: ['#FF4757', '#C0392B'],
   },
   {
@@ -93,7 +93,7 @@ const PRODUCTS: Product[] = [
     price: 15.49, unit: '60 softgels', rating: 4.6, reviews: 1204,
     badge: 'Heart Health', badgeColor: '#FF6B8A',
     description: 'High-potency fish oil softgels for cardiovascular and brain health support.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Omega-3-Capsules.jpg/320px-Omega-3-Capsules.jpg',
+    image: 'https://images.unsplash.com/photo-1585435557343-3b092031a831?w=300&q=80',
     gradient: ['#4FACFE', '#00F2FE'],
   },
   // ── Vitamins ─────────────────────────────────────────────────────────────
@@ -102,14 +102,14 @@ const PRODUCTS: Product[] = [
     price: 8.99, unit: '90 tablets', rating: 4.8, reviews: 3201,
     badge: 'Top Rated', badgeColor: '#43E97B',
     description: 'Essential vitamin D3 for bone health, immune function and mood support.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Vitamin_D_supplement_tablets.jpg/320px-Vitamin_D_supplement_tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1612277795421-9bc7706a4a34?w=300&q=80',
     gradient: ['#FEE140', '#FA709A'],
   },
   {
     id: 'v2', name: 'Vitamin C 1000mg', brand: 'NatureWise', category: 'vitamins',
     price: 7.49, unit: '60 tablets', rating: 4.7, reviews: 2876,
     description: 'High-strength vitamin C antioxidant for immune support and skin health.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Ascorbic_acid_tablets.jpg/320px-Ascorbic_acid_tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1576671081837-49000212a370?w=300&q=80',
     gradient: ['#f7971e', '#ffd200'],
   },
   {
@@ -117,7 +117,7 @@ const PRODUCTS: Product[] = [
     price: 18.99, unit: '100 tablets', rating: 4.6, reviews: 1543,
     badge: 'Senior Formula', badgeColor: '#6C63FF',
     description: 'Complete daily multivitamin formulated specifically for adults over 50.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Vitamin_pills.jpg/320px-Vitamin_pills.jpg',
+    image: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?w=300&q=80',
     gradient: ['#43E97B', '#38F9D7'],
   },
   // ── Diabetes ─────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ const PRODUCTS: Product[] = [
     price: 9.99, unit: '60 tablets', rating: 4.7, reviews: 721,
     badge: 'Rx Grade', badgeColor: '#FF4757',
     description: 'Oral diabetes medication that helps control blood sugar levels in type 2 diabetes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Metformin_tablets.jpg/320px-Metformin_tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=300&q=80',
     gradient: ['#FA709A', '#C0392B'],
   },
   {
@@ -134,7 +134,7 @@ const PRODUCTS: Product[] = [
     price: 34.99, unit: 'Device + strips', rating: 4.9, reviews: 892,
     badge: 'Device', badgeColor: '#A55EEA',
     description: 'Accurate blood glucose monitoring system with large display and 500-reading memory.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Accu-chek_compact_plus_glucometer.jpg/320px-Accu-chek_compact_plus_glucometer.jpg',
+    image: 'https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=300&q=80',
     gradient: ['#A55EEA', '#6C63FF'],
   },
   // ── Cold & Flu ───────────────────────────────────────────────────────────
@@ -143,14 +143,14 @@ const PRODUCTS: Product[] = [
     price: 11.99, unit: '30 tablets', rating: 4.6, reviews: 1673,
     badge: 'Non-Drowsy', badgeColor: '#4FACFE',
     description: '24-hour non-drowsy antihistamine for hay fever, allergies and hives.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Claritin_tablets.jpg/320px-Claritin_tablets.jpg',
+    image: 'https://images.unsplash.com/photo-1631549916768-4119b2e5f926?w=300&q=80',
     gradient: ['#4FACFE', '#00F2FE'],
   },
   {
     id: 'c2', name: 'Cold & Flu Relief', brand: 'Lemsip Max', category: 'cold',
     price: 8.49, unit: '10 sachets', rating: 4.4, reviews: 987,
     description: 'Multi-symptom hot drink for fast relief from cold and flu symptoms.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Lemsip_Max_sachets.jpg/320px-Lemsip_Max_sachets.jpg',
+    image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=300&q=80',
     gradient: ['#2C3E50', '#4A90E2'],
   },
   // ── Digestive ────────────────────────────────────────────────────────────
@@ -159,14 +159,14 @@ const PRODUCTS: Product[] = [
     price: 13.99, unit: '28 capsules', rating: 4.8, reviews: 2109,
     badge: 'Best Value', badgeColor: '#FAAD14',
     description: 'Proton pump inhibitor for heartburn, acid reflux and stomach ulcers.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Omeprazole_capsules.jpg/320px-Omeprazole_capsules.jpg',
+    image: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&q=80',
     gradient: ['#FAAD14', '#f39c12'],
   },
   {
     id: 'g2', name: 'Probiotic Complex', brand: 'BioKult', category: 'digestive',
     price: 22.99, unit: '60 capsules', rating: 4.7, reviews: 1432,
     description: '14-strain live bacteria probiotic for gut health, digestion and immunity.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Probiotic_capsules.jpg/320px-Probiotic_capsules.jpg',
+    image: 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80',
     gradient: ['#43E97B', '#38F9D7'],
   },
   // ── Devices ──────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ const PRODUCTS: Product[] = [
     price: 49.99, unit: 'Device', rating: 4.9, reviews: 3421,
     badge: 'Best Seller', badgeColor: '#A55EEA',
     description: 'Clinically validated upper-arm blood pressure monitor with irregular heartbeat detection.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Omron_blood_pressure_monitor.jpg/320px-Omron_blood_pressure_monitor.jpg',
+    image: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=300&q=80',
     gradient: ['#A55EEA', '#6C63FF'],
   },
   {
@@ -183,7 +183,7 @@ const PRODUCTS: Product[] = [
     price: 24.99, unit: 'Device', rating: 4.8, reviews: 2156,
     badge: 'Popular', badgeColor: '#4FACFE',
     description: 'Fingertip SpO2 and pulse rate monitor with colour LED display and lanyard.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Pulse_oximeter_fingertip.jpg/320px-Pulse_oximeter_fingertip.jpg',
+    image: 'https://images.unsplash.com/photo-1628771065518-0d82f1938462?w=300&q=80',
     gradient: ['#4FACFE', '#00F2FE'],
   },
 ];

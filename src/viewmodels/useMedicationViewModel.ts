@@ -10,6 +10,8 @@ export const useMedicationViewModel = (patientId: string) => {
   const [loading, setLoading] = useState(true);
 
   const fetchMedications = useCallback(async () => {
+    // Don't query until we have a real UUID
+    if (!patientId || patientId === 'patient-123') { setLoading(false); return; }
     setLoading(true);
     const { data, error } = await supabase
       .from('medications')
@@ -22,6 +24,8 @@ export const useMedicationViewModel = (patientId: string) => {
   }, [patientId]);
 
   const fetchTodayLogs = useCallback(async () => {
+    // Don't query until we have a real UUID
+    if (!patientId || patientId === 'patient-123') return;
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -29,7 +33,7 @@ export const useMedicationViewModel = (patientId: string) => {
       .from('medication_logs')
       .select('*')
       .eq('patientid', patientId)
-      .gte('takenAt', startOfDay.toISOString());
+      .gte('loggedat', startOfDay.toISOString()); // DB column is 'loggedat', not 'takenAt'
 
     if (error) console.error(error);
     else setTodayLogs(data || []);
@@ -57,7 +61,7 @@ export const useMedicationViewModel = (patientId: string) => {
         patientid: patientId,
         status,
         scheduledtime: scheduledTime,
-        takenat: new Date().toISOString(),
+        loggedat: new Date().toISOString(), // DB column is 'loggedat'
       });
       await fetchTodayLogs();
     } catch (error: any) {

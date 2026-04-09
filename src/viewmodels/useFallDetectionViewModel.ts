@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { SensorService } from '../services/SensorService';
 import { FallDetectionState } from '../models/FallEvent';
@@ -10,140 +10,162 @@ import { AiModelService } from '../services/AiModelService';
 import { SignalService } from '../services/SignalService';
 import { OpenAiService } from '../services/OpenAiService';
 
-export const useFallDetectionViewModel = (
-  patientId: string,
-  patientName: string,
-  fallThreshold: number = 2.5, // G-Force threshold
-  impactWindow: number = 2000 // ms
-) => {
-  const [state, setState] = useState<FallDetectionState>('idle');
-  const [lastGForce, setLastGForce] = useState(0);
-  const [timer, setTimer] = useState<number | null>(null);
+const RESPONSE_WINDOW_MS = 20_000; // 20 s for user to cancel before emergency
 
+export const useFallDetectionViewModel = (
+  patientId:  string,
+  patientName: string,
+) => {
+  const [state,     setState]     = useState<FallDetectionState>('idle');
+  const [lastGForce, setLastGForce] = useState(0);
+
+  // Use a ref for the countdown so cancelAlert always clears the live timer
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Init AI model once ────────────────────────────────────────────────────
   useEffect(() => {
-    // Initialize AI Model
     AiModelService.init();
   }, []);
 
+  // ── Emergency dispatch ────────────────────────────────────────────────────
   const triggerEmergency = useCallback(async () => {
     setState('emergency_triggered');
-    SpeechService.speak("I'm sorry, you didn't respond. I'm calling for help now. Please stay calm.");
+    SpeechService.speak("I couldn't reach you. Alerting your emergency contacts now. Please stay calm.");
 
-    // 1. Get Location
-    const coords = await LocationService.trackLocation(patientId);
-    const mapsLink = coords ? LocationService.getMapsLink(coords.latitude, coords.longitude) : "Unknown Location";
+    const coords   = await LocationService.trackLocation(patientId);
+    const mapsLink = coords
+      ? LocationService.getMapsLink(coords.latitude, coords.longitude)
+      : 'Unknown Location';
     const timestamp = new Date().toLocaleString();
 
-    // 2. Log fall event to Supabase
+    // Log to Supabase — all column names lowercase to match DB schema
     await supabase.from('fall_events').insert({
-      patientId,
-      latitude: coords?.latitude ?? null,
-      longitude: coords?.longitude ?? null,
-      timestamp: new Date().toISOString(),
-      confirmed: true,
+      patientid:  patientId,          // DB: patientid (lowercase)
+      latitude:   coords?.latitude  ?? null,
+      longitude:  coords?.longitude ?? null,
+      timestamp:  new Date().toISOString(),
+      confirmed:  true,
+      source:     'foreground',
     });
 
-    // 3. SMS primary emergency contact
+    // SMS primary emergency contact — columns: patientid, isprimary
     const { data: contact } = await supabase
       .from('emergency_contacts')
-      .select('*')
-      .eq('patientId', patientId)
-      .eq('isPrimary', true)
+      .select('phone, name')
+      .eq('patientid', patientId)     // DB: patientid
+      .eq('isprimary', true)          // DB: isprimary
       .single();
 
     if (contact) {
-      const smsMessage = `EMERGENCY ALERT: ${patientName} has detected a fall at ${timestamp}!\nLocation: ${mapsLink}`;
-      await SmsService.sendEmergencySms(contact.phone, smsMessage);
+      await SmsService.sendEmergencySms(
+        contact.phone,
+        `EMERGENCY: ${patientName} has fallen at ${timestamp}.\nLocation: ${mapsLink}\nPlease respond immediately.`,
+      );
     }
 
-    // 4. Push notification to linked doctor(s)
-    const { data: doctorLinks } = await supabase
+    // Push notification to linked doctors
+    const { data: links } = await supabase
       .from('doctor_patient_links')
       .select('doctor_id')
       .eq('patient_id', patientId);
 
-    if (doctorLinks && doctorLinks.length > 0) {
-      const doctorIds = doctorLinks.map((l: any) => l.doctor_id);
+    if (links && links.length > 0) {
+      const doctorIds = links.map((l: any) => l.doctor_id);
       const { data: doctorProfiles } = await supabase
         .from('profiles')
         .select('push_token')
         .in('id', doctorIds)
         .not('push_token', 'is', null);
 
-      if (doctorProfiles && doctorProfiles.length > 0) {
-        const tokens = doctorProfiles.map((p: any) => p.push_token).filter(Boolean);
+      const tokens = (doctorProfiles ?? []).map((p: any) => p.push_token).filter(Boolean);
+      if (tokens.length > 0) {
         await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(tokens.map((token: string) => ({
-            to: token,
-            title: '🚨 EMERGENCY: Fall Detected',
-            body: `${patientName} has fallen and needs assistance!\nLocation: ${mapsLink}`,
-            data: { type: 'fall_alert', patientId, mapsLink },
+            to:       token,
+            title:    'EMERGENCY: Fall Detected',
+            body:     `${patientName} has fallen and needs assistance. Location: ${mapsLink}`,
+            data:     { type: 'fall_alert', patientId, mapsLink },
             priority: 'high',
-            sound: 'default',
+            sound:    'default',
           }))),
         });
       }
     }
 
-    console.log('EMERGENCY TRIGGERED: Fall confirmed, SMS + push notifications sent');
+    console.log('[FallDetection] Emergency dispatched — SMS + push sent.');
   }, [patientId, patientName]);
 
-  const handleSuspiciousMovement = useCallback(async (gForce: number) => {
-    setLastGForce(gForce);
-    setState('suspicious');
-    
-    // Allow 500ms for the buffer to fill
-    setTimeout(async () => {
-      const { isFall, confidence } = await AiModelService.predictFall();
-      
-      if (isFall) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setState('user_response_window');
-
-        // Dynamic OpenAI Triage Response
-        const triageResponse = await OpenAiService.getEmergencyTriage(
-          "No voice input yet", 
-          `G-Force Magnitude: ${gForce.toFixed(2)}`
-        );
-        SpeechService.speak(triageResponse);
-        
-        const countdown = setTimeout(() => {
-          triggerEmergency();
-        }, 20000);
-        setTimer(countdown as unknown as number);
-      } else {
-        setState('idle');
-      }
-    }, 500);
-  }, [triggerEmergency]);
-
+  // ── Cancel (user pressed "I'm OK") ───────────────────────────────────────
   const cancelAlert = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     setState('idle');
-  }, [timer]);
+    SpeechService.speak("Good to hear you're okay. I'll keep monitoring.");
+  }, []);
 
+  // ── Suspicious movement handler ───────────────────────────────────────────
+  const handleSuspiciousMovement = useCallback(async (gForce: number) => {
+    if (state !== 'idle') return;          // already handling an event
+
+    setLastGForce(gForce);
+    setState('suspicious');
+
+    // Give the buffer ~500 ms to accumulate post-impact samples for stillness check
+    await new Promise(r => setTimeout(r, 600));
+
+    const threshold = SignalService.getAdaptiveThreshold();
+    const { isFall, confidence, peakG } = await AiModelService.predictFall(threshold);
+
+    console.log(`[FallDetection] isFall=${isFall} confidence=${confidence.toFixed(2)} peakG=${peakG.toFixed(2)}`);
+
+    if (isFall) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setState('user_response_window');
+
+      // AI triage voice prompt
+      try {
+        const triage = await OpenAiService.getEmergencyTriage(
+          'No voice input',
+          `Peak G-Force: ${peakG.toFixed(2)}G, confidence: ${(confidence * 100).toFixed(0)}%`,
+        );
+        SpeechService.speak(triage);
+      } catch {
+        SpeechService.speak(`${patientName}, are you okay? I detected a possible fall. If you need help, stay still. I will alert your contacts in 20 seconds.`);
+      }
+
+      // Start countdown — use ref so cancelAlert always clears the right timer
+      timerRef.current = setTimeout(() => {
+        triggerEmergency();
+      }, RESPONSE_WINDOW_MS);
+    } else {
+      setState('idle');
+    }
+  }, [state, triggerEmergency, patientName]);
+
+  // ── Sensor loop ───────────────────────────────────────────────────────────
   useEffect(() => {
-    SensorService.setUpdateInterval(100);
+    SensorService.setUpdateInterval(50); // 20 Hz — better temporal resolution
     SensorService.startMonitoring((data) => {
       SignalService.addSample(data);
-      const gForce = SensorService.calculateGForce(data.accelerometer);
-      // Use adaptive threshold — adjusts based on recent activity level
-      const adaptiveThreshold = SignalService.getAdaptiveThreshold();
-      if (state === 'idle' && gForce > adaptiveThreshold) {
-        handleSuspiciousMovement(gForce);
+
+      if (state === 'idle') {
+        const gForce    = SensorService.calculateGForce(data.accelerometer);
+        const threshold = SignalService.getAdaptiveThreshold();
+        if (gForce > threshold) {
+          handleSuspiciousMovement(gForce);
+        }
       }
     });
 
     return () => {
       SensorService.stopMonitoring();
-      if (timer) clearTimeout(timer);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [state, fallThreshold, handleSuspiciousMovement, timer]);
+  }, [state, handleSuspiciousMovement]);
 
   return {
     state,

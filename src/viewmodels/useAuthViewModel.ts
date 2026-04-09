@@ -32,6 +32,18 @@ export const useAuthViewModel = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const signUp = async (email: string, password: string, fullName: string = '', userRole: 'patient' | 'doctor' = 'patient') => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName, role: userRole },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
     await BackgroundMonitorService.unregister();
     await supabase.auth.signOut();
@@ -42,6 +54,7 @@ export const useAuthViewModel = () => {
     session,
     loading,
     role,
+    signUp,
     signOut,
     isAuthenticated: !!session,
   };

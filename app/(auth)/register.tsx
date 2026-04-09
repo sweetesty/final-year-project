@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Stack, Link } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -10,17 +10,35 @@ export default function RegisterScreen() {
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const { signUp } = useAuthViewModel();
 
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'patient' | 'doctor'>('patient');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    if (!fullName || !email || !password) {
+      alert('Please fill in all fields');
+      return;
+    }
     if (password !== confirmPassword) {
       alert("Passwords don't match");
       return;
     }
-    signUp(email, password);
+    if (password.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+    setLoading(true);
+    try {
+      await signUp(email, password, fullName, role);
+      alert('Account created! You are now logged in.');
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,6 +70,17 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <Text style={[styles.label, { color: themeColors.text }]}>Full Name</Text>
+            <TextInput
+              style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
+              placeholder="Your full name"
+              placeholderTextColor={themeColors.muted}
+              value={fullName}
+              onChangeText={setFullName}
+            />
+          </View>
+
           <View style={styles.inputContainer}>
             <Text style={[styles.label, { color: themeColors.text }]}>Email</Text>
             <TextInput
@@ -89,11 +118,12 @@ export default function RegisterScreen() {
             />
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.button, { backgroundColor: themeColors.tint }]}
             onPress={handleRegister}
+            disabled={loading}
           >
-            <Text style={styles.buttonText}>Get Started</Text>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Get Started</Text>}
           </TouchableOpacity>
         </View>
 

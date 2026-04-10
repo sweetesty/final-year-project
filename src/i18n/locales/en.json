@@ -30,6 +30,8 @@
   },
   "home": {
     "welcome": "Good morning",
+    "good_afternoon": "Good afternoon",
+    "good_evening": "Good evening",
     "status": "Healthy & Stable",
     "actions": "Quick Actions",
     "appointments": "Upcoming Appointments"

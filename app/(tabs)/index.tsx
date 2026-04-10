@@ -52,8 +52,8 @@ function hour() { return new Date().getHours(); }
 function greeting(t: any) {
   const h = hour();
   if (h < 12) return t('home.welcome');
-  if (h < 17) return t('home.welcome'); // Could add afternoon to locale
-  return t('home.welcome'); // Could add evening to locale
+  if (h < 17) return t('home.good_afternoon');
+  return t('home.good_evening');
 }
 function hrZone(hr: number): { label: string; color: string; bg: string } {
   if (hr < 60) return { label: 'Low',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' };

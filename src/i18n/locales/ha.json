@@ -30,6 +30,8 @@
   },
   "home": {
     "welcome": "Ina kwana",
+    "good_afternoon": "Barka da rana",
+    "good_evening": "Barka da yamma",
     "status": "Lafiya & Tabbatacce",
     "actions": "Ayyukan gaggawa",
     "appointments": "Alƙawura masu zuwa"

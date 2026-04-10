@@ -51,7 +51,9 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
   React.useEffect(() => {
     if (visible) {
       const timer = setTimeout(() => {
-        const greeting = `${t('home.welcome')}, ${userName}. ${t('common.how_are_you')}`;
+        const h = new Date().getHours();
+        const greetKey = h < 12 ? 'home.welcome' : h < 17 ? 'home.good_afternoon' : 'home.good_evening';
+        const greeting = `${t(greetKey)}, ${userName}. ${t('common.how_are_you')}`;
         SpeechService.speak(greeting, i18n.language);
       }, 600);
       return () => clearTimeout(timer);

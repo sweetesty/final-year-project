@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -14,13 +14,16 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useRouter, useRootNavigationState } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 const { width } = Dimensions.get('window');
 const CARD_W = (width - Spacing.lg * 2 - Spacing.md) / 2;
+
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -241,6 +244,18 @@ export default function PharmacyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const router = useRouter();
+  const { role } = useAuthViewModel();
+
+  const navigationState = useRootNavigationState();
+  const isNavReady = navigationState?.key;
+
+  // --- Doctor Shield & Redirect ---
+  useEffect(() => {
+    if (isNavReady && role === 'doctor') {
+      router.replace('/doctor-home');
+    }
+  }, [role, isNavReady]);
 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -273,6 +288,15 @@ export default function PharmacyScreen() {
     `${cartCount} item(s) — ₦${cartTotal.toLocaleString()}\nYour pharmacy will prepare your order shortly.`,
     [{ text: 'OK', onPress: () => setCart({}) }]
   );
+
+  // Prevent UI flicker for doctors before redirect
+  if (role === 'doctor') {
+    return (
+      <View style={{ flex: 1, backgroundColor: themeColors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={themeColors.tint} />
+      </View>
+    );
+  }
 
   const bgGrad: [string, string] = isDark ? ['#0A0E1A', '#0F1729'] : ['#F0F4FF', '#F8FAFF'];
 

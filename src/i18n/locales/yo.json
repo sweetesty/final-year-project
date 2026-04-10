@@ -1,0 +1,45 @@
+{
+  "common": {
+    "emergency": "Ìràngbà",
+    "doctor": "Oníṣègùn mi",
+    "message": "Fi iṣẹ́ ránṣẹ́ sí Oníṣègùn",
+    "chat": "Ìjíròrò Ìlera",
+    "vitals": "Àmì Ìlera",
+    "loading": "Ó ń gbé e bọ̀...",
+    "call": "Pe",
+    "video": "Fídíò",
+    "language": "Èdè",
+    "medication": "Oògùn",
+    "prescription": "Àṣẹ Oníṣègùn",
+    "verified": "Oníṣègùn fọwọ́sí",
+    "prescribed_by": "Àṣẹ láti ọwọ́ Dr. {{doctor}}",
+    "self_log": "Oògùn elétìífé",
+    "add_prescription": "Fi àṣẹ Oníṣègùn kún un",
+    "take": "Lò ó",
+    "skip": "Fo kọjá",
+    "logged": "A ti kọ ọ́ sílẹ̀",
+    "noted": "Alaye rẹ ti de wa lọwọ",
+    "success": "O yọri si rere",
+    "info_shared": "Mo ti pin alaye yii pẹlu oníṣègùn rẹ.",
+    "how_are_you": "Báwo ni ara rẹ rí lónìí?",
+    "hr_is": "Ìwọ̀n ìlù ọkàn rẹ jẹ́ {{hr}} BPM.",
+    "status_is": "Ìlera rẹ wà ní {{status}}.",
+    "steps_today": "O ti gùn {{steps}} ìṣísẹ̀ lónìí.",
+    "next_med_at": "Òògùn tó kàn ni {{name}} tó yẹ ní agogo {{time}}.",
+    "no_more_meds": "O kò ní òògùn kankan mọ́ tó yẹ kí o lò lónìí."
+  },
+  "home": {
+    "welcome": "Ẹ kú àárọ̀",
+    "status": "Dídá-ń-dá & Dídúró",
+    "actions": "Ìgbésẹ̀ Kánkán",
+    "appointments": "Ìpàdé tó ń bọ̀"
+  },
+  "med": {
+    "schedule": "Àfikún Oògùn",
+    "name": "Orúkọ Oògùn",
+    "dosage": "Mímú Oògùn",
+    "critical": "Pàjáwìrì",
+    "add": "Fi Oògùn kún un",
+    "time": "Àkókò láti lò ó"
+  }
+}

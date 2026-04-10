@@ -17,14 +17,20 @@ export class ConsultationService {
     const meetingId = this.generateMeetingId(doctorName, patientName);
     const url = `https://meet.jit.si/${meetingId}`;
 
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      // Note: In a real app, you would send a push notification to the patient here.
-      await Linking.openURL(url);
-      return meetingId;
-    } else {
-      console.error("Could not launch Jitsi video call.");
-      return null;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        // Note: In a real app, you would send a push notification to the patient here.
+        await Linking.openURL(url);
+        return meetingId;
+      } else {
+        console.error("Could not launch Jitsi video call, URL not supported.");
+        return null;
+      }
+    } catch (error: any) {
+      console.error("Linking error:", error);
+      // Fallback for emulators that can't open URLs
+      return meetingId; 
     }
   }
 

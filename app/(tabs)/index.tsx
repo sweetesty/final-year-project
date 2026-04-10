@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,8 +8,12 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRef } from 'react';
+import { useRouter, useFocusEffect, Stack, useRootNavigationState } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, {
@@ -30,6 +34,11 @@ import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useFallDetectionViewModel } from '@/src/viewmodels/useFallDetectionViewModel';
 import { DoctorService } from '@/src/services/DoctorService';
 import { VitalsService } from '@/src/services/VitalsService';
+import { PedometerService } from '@/src/services/PedometerService';
+import { BarChart } from 'react-native-chart-kit';
+import { useTranslation } from 'react-i18next';
+import { SymptomLogModal } from '@/src/components/SymptomLogModal';
+import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 
 const { width } = Dimensions.get('window');
 
@@ -40,11 +49,11 @@ type Vitals = { heartRate: number; spo2: number; steps: number; activeMin: numbe
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function hour() { return new Date().getHours(); }
-function greeting() {
+function greeting(t: any) {
   const h = hour();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return t('home.welcome');
+  if (h < 17) return t('home.welcome'); // Could add afternoon to locale
+  return t('home.welcome'); // Could add evening to locale
 }
 function hrZone(hr: number): { label: string; color: string; bg: string } {
   if (hr < 60) return { label: 'Low',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' };
@@ -64,13 +73,20 @@ function LiveDot({ color }: { color: string }) {
 }
 
 function VitalTile({
-  icon, value, unit, label, color, delay,
-}: { icon: string; value: string | number; unit: string; label: string; color: string; delay: number }) {
+  icon, value, unit, label, color, delay, onAction,
+}: { icon: string; value: string | number; unit: string; label: string; color: string; delay: number; onAction?: () => void }) {
   const isDark = useColorScheme() === 'dark';
   return (
     <Animated.View entering={FadeInRight.delay(delay).duration(420)} style={[styles.vitalTile, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
-      <View style={[styles.vitalTileIcon, { backgroundColor: color + '18' }]}>
-        <MaterialIcons name={icon as any} size={20} color={color} />
+      <View style={styles.tileHeader}>
+        <View style={[styles.vitalTileIcon, { backgroundColor: color + '18' }]}>
+          <MaterialIcons name={icon as any} size={20} color={color} />
+        </View>
+        {onAction && (
+          <TouchableOpacity onPress={onAction} style={styles.tileAction}>
+            <MaterialIcons name="assessment" size={18} color={color} />
+          </TouchableOpacity>
+        )}
       </View>
       <Text style={[styles.vitalTileValue, { color: isDark ? '#F8FAFC' : '#1E293B' }]}>{value}</Text>
       <Text style={[styles.vitalTileUnit, { color: color }]}>{unit}</Text>
@@ -80,22 +96,65 @@ function VitalTile({
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const C = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const { session } = useAuthViewModel();
-
+  const { session, role } = useAuthViewModel();
+  const { t, i18n } = useTranslation();
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [symptomModalVisible, setSymptomModalVisible] = useState(false);
+  
   const patientId   = session?.user?.id ?? '';
   const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
+
+  const navigationState = useRootNavigationState();
+  const isNavReady = navigationState?.key;
+
+  // --- Doctor Shield & Redirect ---
+  useEffect(() => {
+    if (isNavReady && role === 'doctor') {
+      router.replace('/doctor-home');
+    }
+  }, [role, isNavReady, router]);
+
+  const { medications, refresh: refreshMeds } = useMedicationViewModel(patientId);
+
+  // Refresh data whenever dashboard becomes focused (after adding a med)
+  useFocusEffect(
+    useCallback(() => {
+      if (patientId) refreshMeds();
+    }, [patientId, refreshMeds])
+  );
   const firstName   = patientName.split(' ')[0];
 
   const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientId, patientName);
 
   const [patientCode, setPatientCode] = useState('––– –––');
   const [vitals, setVitals] = useState<Vitals>({ heartRate: 72, spo2: 98, steps: 1240, activeMin: 42 });
+
+  // Daily Symptom Check-in Logic
+  useEffect(() => {
+    if (role === 'doctor') return;
+    // For this demo, we show it 2 seconds after mount to simulate a proactive prompt
+    const timer = setTimeout(() => {
+      setSymptomModalVisible(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [role]);
+
+  // History state
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [stepHistory, setStepHistory] = useState<{ date: string; steps: number }[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+
+  // Doctor state
+  const [doctor, setDoctor] = useState<any>(null);
+  
+  // Date change tracker
+  const lastDateRef = useRef(new Date().getDate());
 
   // Fall alert spring
   const alertY = useSharedValue(900);
@@ -112,46 +171,156 @@ export default function HomeScreen() {
     DoctorService.ensurePatientCode(patientId)
       .then(c => { if (c) setPatientCode(c.replace(/(\d{3})(\d{3})/, '$1 $2')); })
       .catch(console.error);
+
+    DoctorService.getLinkedDoctor(patientId)
+      .then(setDoctor)
+      .catch(console.error);
   }, [patientId]);
 
-  // Vitals simulation
+  // Physical step counting
   useEffect(() => {
-    let steps = vitals.steps;
-    let mins  = vitals.activeMin;
-    const id  = setInterval(() => {
+    let subscription: { remove: () => void } | null = null;
+
+    async function startPedometer() {
+      const isAvailable = await PedometerService.isAvailableAsync();
+      if (!isAvailable) {
+        console.warn('[Home] Pedometer not available on this device');
+        return;
+      }
+
+      const granted = await PedometerService.requestPermissionsAsync();
+      if (!granted) {
+        console.warn('[Home] Pedometer permission denied');
+        return;
+      }
+
+      // 1. Get steps already taken today
+      const midnight = PedometerService.getTodayMidnight();
+      const initialTotalSteps = await PedometerService.getStepCountAsync(midnight, new Date());
+      setVitals(prev => ({ ...prev, steps: initialTotalSteps }));
+
+      // 2. Watch for steps taken from NOW on
+      subscription = PedometerService.watchStepCount(stepsSinceStarted => {
+        setVitals(prev => ({ ...prev, steps: initialTotalSteps + stepsSinceStarted }));
+      });
+    }
+
+    startPedometer().catch(err => console.error('[Home] Pedometer error:', err));
+    return () => subscription?.remove();
+  }, []);
+
+  const refreshPedometer = async () => {
+    const midnightResource = PedometerService.getTodayMidnight();
+    const steps = await PedometerService.getStepCountAsync(midnightResource, new Date());
+    setVitals(prev => ({ ...prev, steps }));
+  };
+
+  const showHistory = async () => {
+    setLoadingHistory(true);
+    setHistoryVisible(true);
+    try {
+      const data = await PedometerService.getStepHistoryAsync(7);
+      setStepHistory(data);
+    } catch (e) {
+      console.error('[Home] History error:', e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Vitals simulation (HR, SpO2, Active Time)
+  useEffect(() => {
+    const id = setInterval(() => {
       const hr   = 68 + Math.floor(Math.random() * 16);
       const spo2 = 96 + Math.floor(Math.random() * 4);
-      steps += Math.floor(Math.random() * 18);
-      mins  += 1;
-      setVitals({ heartRate: hr, spo2, steps, activeMin: mins });
-      if (hr > 95) SpeechService.speak(`${firstName}, your heart rate is ${hr} BPM. Please rest.`);
-      if (patientId) VitalsService.logVitals({ patientId, heartRate: hr, spo2, steps, timestamp: new Date().toISOString() }).catch(console.error);
+      
+      setVitals(prev => {
+        const nextSteps = prev.steps; // steps are now handled by pedometer
+        const nextMins  = prev.activeMin + 1;
+        
+        // Auto-reset check
+        const now = new Date();
+        if (now.getDate() !== lastDateRef.current) {
+          lastDateRef.current = now.getDate();
+          refreshPedometer(); // Sync steps for the new day
+        }
+
+        if (patientId && patientId !== '') {
+          VitalsService.logVitals({ 
+            patientId, 
+            heartRate: hr, 
+            spo2, 
+            steps: nextSteps, 
+            timestamp: new Date().toISOString() 
+          }).catch(err => console.error('[VitalsService] simulation error:', err));
+        }
+
+        return { ...prev, heartRate: hr, spo2, activeMin: nextMins };
+      });
+
+      if (hr > 95) SpeechService.speak(`${firstName}, your heart rate is ${hr} BPM. Please rest.`, i18n.language);
     }, 15000);
     return () => clearInterval(id);
-  }, [patientId, firstName]);
+  }, [patientId, firstName, i18n.language]);
+
+  const handleLogSymptom = async (type: string) => {
+    // Real-world: supabase.from('symptoms').insert(...)
+    console.log('[Symptom] Logged:', type);
+    setSymptomModalVisible(false);
+  };
 
   const zone = hrZone(vitals.heartRate);
+
+  const startAudioBriefing = () => {
+    const lng = i18n.language;
+    
+    // 1. Localized Vitals & Status
+    const hrText = t('common.hr_is', { hr: vitals.heartRate });
+    const statusText = t('common.status_is', { status: zone.label });
+    const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
+    
+    // 2. Localized Medication Info
+    const nextMed = medications.length > 0 ? medications[0] : null;
+    const medText = nextMed 
+      ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
+      : t('common.no_more_meds');
+
+    // 3. Construct Narrative
+    const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
+    SpeechService.speak(fullText, lng);
+  };
+
+  // Prevent UI flicker for doctors before redirect
+  if (role === 'doctor') {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={C.tint} />
+      </View>
+    );
+  }
 
   // ─── Layout ─────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.root, { backgroundColor: isDark ? '#080C18' : '#F4F7FE' }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* ── Fall Alert Sheet (slides up from bottom) ──────────────────── */}
-      <Animated.View style={[styles.fallSheet, alertStyle]}>
-        <LinearGradient colors={['#7F1D1D', '#DC2626']} style={styles.fallSheetInner}>
-          <View style={styles.fallSheetTop}>
-            <MaterialIcons name="warning" size={32} color="#fff" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.fallSheetTitle}>Fall Detected</Text>
-              <Text style={styles.fallSheetSub}>Emergency alert in 20 seconds</Text>
+      {/* ── Fall Alert Sheet — PATIENTS ONLY (slides up from bottom) ──── */}
+      {role !== 'doctor' && (
+        <Animated.View style={[styles.fallSheet, alertStyle]}>
+          <LinearGradient colors={['#7F1D1D', '#DC2626']} style={styles.fallSheetInner}>
+            <View style={styles.fallSheetTop}>
+              <MaterialIcons name="warning" size={32} color="#fff" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fallSheetTitle}>Fall Detected</Text>
+                <Text style={styles.fallSheetSub}>Emergency alert in 20 seconds</Text>
+              </View>
             </View>
-          </View>
-          <TouchableOpacity style={styles.fallCancelBtn} onPress={cancelAlert}>
-            <Text style={styles.fallCancelText}>I'm OK — Cancel Alert</Text>
-          </TouchableOpacity>
-        </LinearGradient>
-      </Animated.View>
+            <TouchableOpacity style={styles.fallCancelBtn} onPress={cancelAlert}>
+              <Text style={styles.fallCancelText}>I'm OK — Cancel Alert</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </Animated.View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
 
@@ -172,10 +341,23 @@ export default function HomeScreen() {
 
           <Animated.View entering={FadeIn.delay(50).duration(500)} style={styles.headerTop}>
             <View>
-              <Text style={styles.headerGreeting}>{greeting()}</Text>
+              <Text style={styles.headerGreeting}>{greeting(t)}</Text>
               <Text style={styles.headerName}>{firstName}</Text>
             </View>
             <View style={styles.headerRight}>
+              <TouchableOpacity 
+                style={[styles.audioBriefBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={startAudioBriefing}
+              >
+                <MaterialIcons name="volume-up" size={20} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.monitorBadge, { marginBottom: 8 }]}
+                onPress={() => setLangModalVisible(true)}
+              >
+                <MaterialIcons name="language" size={14} color="#fff" />
+                <Text style={styles.monitorBadgeText}>{i18n.language.toUpperCase()}</Text>
+              </TouchableOpacity>
               <View style={styles.monitorBadge}>
                 <LiveDot color={isUserActive ? '#FCD34D' : '#34D399'} />
                 <Text style={styles.monitorBadgeText}>
@@ -208,10 +390,14 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity
               style={styles.codeStripBtn}
-              onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: 'doc-123', partnerName: 'Doctor' } })}
+              onPress={() => {
+                const targetId = doctor?.id || 'demo-doctor-001';
+                const targetName = doctor?.full_name || 'Dr. Sarah Wilson';
+                router.push({ pathname: '/chat-room', params: { partnerId: targetId, partnerName: targetName } });
+              }}
             >
               <MaterialIcons name="chat" size={16} color="#fff" />
-              <Text style={styles.codeStripBtnText}>Message Doctor</Text>
+              <Text style={styles.codeStripBtnText}>{t('common.message')}</Text>
             </TouchableOpacity>
           </Animated.View>
         </LinearGradient>
@@ -221,7 +407,7 @@ export default function HomeScreen() {
         ════════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: C.text }]}>Live Vitals</Text>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>{t('common.vitals')}</Text>
             <View style={styles.sectionLive}>
               <LiveDot color="#10B981" />
               <Text style={[styles.sectionLiveText, { color: C.muted }]}>Real-time</Text>
@@ -230,7 +416,7 @@ export default function HomeScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vitalsRow}>
             <VitalTile icon="favorite"       value={vitals.heartRate} unit="BPM"  label="Heart Rate"   color="#EF4444" delay={0}   />
             <VitalTile icon="air"            value={`${vitals.spo2}%`} unit="SpO2" label="Blood Oxygen"  color="#3B82F6" delay={60}  />
-            <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit="steps" label="Steps Today" color="#10B981" delay={120} />
+            <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit="steps" label="Steps Today" color="#10B981" delay={120} onAction={showHistory} />
             <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label="Active Time"  color="#8B5CF6" delay={180} />
           </ScrollView>
         </View>
@@ -263,13 +449,13 @@ export default function HomeScreen() {
             QUICK ACTIONS  — 2 × 2 with labels below, no emoji
         ════════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: C.text }]}>Quick Access</Text>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>{t('home.actions')}</Text>
           <View style={styles.actionsGrid}>
             {[
               { icon: 'location-on',    label: 'Live Map',     sub: 'Track location',  color: '#6366F1', route: '/live-tracking' },
               { icon: 'medication',     label: 'Medications',  sub: 'Schedule & doses', color: '#EC4899', route: '/medication' },
-              { icon: 'phone-in-talk',  label: 'Emergency',   sub: 'SOS contacts',    color: '#EF4444', route: '/emergency-contacts' },
-              { icon: 'local-hospital', label: 'My Doctor',   sub: 'View profile',    color: '#10B981', route: '/(tabs)/doctor' },
+              { icon: 'phone-in-talk',  label: t('common.emergency'),   sub: 'SOS contacts',    color: '#EF4444', route: '/emergency-contacts' },
+              { icon: 'local-hospital', label: t('common.doctor'), sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : 'Direct Contact', color: '#10B981', route: '/(tabs)/doctor' },
             ].map((a, i) => (
               <Animated.View key={a.label} entering={FadeInDown.delay(360 + i * 50).duration(380)} style={{ width: (width - Spacing.lg * 2 - 12) / 2 }}>
                 <TouchableOpacity
@@ -326,11 +512,118 @@ export default function HomeScreen() {
         </Animated.View>
 
       </ScrollView>
+
+      {/* ── Step History Modal ────────────────────────────────────── */}
+      <Modal visible={historyVisible} animationType="fade" transparent onRequestClose={() => setHistoryVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setHistoryVisible(false)} />
+          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
+            <View style={styles.historyHeader}>
+              <Text style={[styles.historyTitle, { color: C.text }]}>Step History</Text>
+              <TouchableOpacity onPress={() => setHistoryVisible(false)} style={styles.historyClose}>
+                <MaterialIcons name="close" size={24} color={C.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingHistory ? (
+              <View style={styles.historyLoading}>
+                <ActivityIndicator size="large" color="#10B981" />
+                <Text style={[styles.historyLoadingText, { color: C.muted }]}>Fetching history...</Text>
+              </View>
+            ) : (
+              <View style={styles.historyContent}>
+                <View style={styles.chartWrap}>
+                  <BarChart
+                    data={{
+                      labels: stepHistory.map(h => h.date),
+                      datasets: [{ data: stepHistory.map(h => h.steps) }]
+                    }}
+                    width={width - 48}
+                    height={220}
+                    yAxisLabel=""
+                    yAxisSuffix=""
+                    chartConfig={{
+                      backgroundColor: isDark ? '#0F172A' : '#fff',
+                      backgroundGradientFrom: isDark ? '#0F172A' : '#fff',
+                      backgroundGradientTo: isDark ? '#0F172A' : '#fff',
+                      decimalPlaces: 0,
+                      color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
+                      labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity * 0.5})` : `rgba(0, 0, 0, ${opacity * 0.5})`,
+                      propsForBackgroundLines: { strokeDasharray: "" },
+                      style: { borderRadius: 16 },
+                    }}
+                    style={{ marginVertical: 8, borderRadius: 16 }}
+                    verticalLabelRotation={0}
+                    fromZero={true}
+                    showValuesOnTopOfBars={true}
+                  />
+                </View>
+
+                {/* Legend / Stats */}
+                <View style={styles.historyList}>
+                  {stepHistory.slice().reverse().map((h, i) => (
+                    <View key={i} style={[styles.historyRow, i < stepHistory.length - 1 && { borderBottomWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+                      <Text style={[styles.historyLabel, { color: C.text }]}>{h.date}</Text>
+                      <Text style={[styles.historyValue, { color: '#10B981' }]}>{h.steps.toLocaleString()} <Text style={{ fontSize: 11, color: C.muted }}>steps</Text></Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ── Language Selection Modal ────────────────────────────────── */}
+      <Modal visible={langModalVisible} animationType="slide" transparent onRequestClose={() => setLangModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setLangModalVisible(false)} />
+          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
+            <View style={styles.historyHeader}>
+              <Text style={[styles.historyTitle, { color: C.text }]}>{t('common.language')}</Text>
+              <TouchableOpacity onPress={() => setLangModalVisible(false)} style={styles.historyClose}>
+                <MaterialIcons name="close" size={24} color={C.muted} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ gap: 12 }}>
+              {[
+                { id: 'en', name: 'English', flag: '🇬🇧' },
+                { id: 'yo', name: 'Yorùbá', flag: '🇳🇬' },
+                { id: 'ig', name: 'Igbo', flag: '🇳🇬' },
+                { id: 'ha', name: 'Hausa', flag: '🇳🇬' },
+              ].map((lang) => (
+                <TouchableOpacity
+                  key={lang.id}
+                  style={[
+                    styles.historyRow, 
+                    { paddingVertical: 16, borderBottomWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+                    i18n.language === lang.id && { backgroundColor: C.tint + '10' }
+                  ]}
+                  onPress={() => {
+                    i18n.changeLanguage(lang.id);
+                    setLangModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.historyLabel, { color: C.text }]}>{lang.flag}  {lang.name}</Text>
+                  {i18n.language === lang.id && <MaterialIcons name="check" size={20} color={C.tint} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Symptom Modal */}
+      <SymptomLogModal
+        visible={symptomModalVisible}
+        onClose={() => setSymptomModalVisible(false)}
+        onLog={handleLogSymptom}
+        theme={C}
+        userName={firstName}
+      />
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -378,8 +671,10 @@ const styles = StyleSheet.create({
 
   // Vitals tiles
   vitalsRow: { gap: 10, paddingRight: Spacing.lg },
-  vitalTile: { width: 100, borderRadius: 16, padding: 14, alignItems: 'flex-start', ...Shadows.light },
-  vitalTileIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  vitalTile: { width: 115, borderRadius: 16, padding: 14, alignItems: 'flex-start', ...Shadows.light },
+  tileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 },
+  vitalTileIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  tileAction: { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.03)', justifyContent: 'center', alignItems: 'center' },
   vitalTileValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   vitalTileUnit: { fontSize: 11, fontWeight: '700', marginTop: 1 },
   vitalTileLabel: { fontSize: 11, marginTop: 4 },
@@ -417,4 +712,22 @@ const styles = StyleSheet.create({
   fallSheetSub: { color: 'rgba(255,255,255,0.75)', fontSize: 13, marginTop: 2 },
   fallCancelBtn: { backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   fallCancelText: { color: '#DC2626', fontSize: 16, fontWeight: '800' },
+
+  // Modal Backdrop
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+
+  // History Sheet
+  historySheet: { width: width - 24, borderRadius: 24, padding: 24, ...Shadows.medium },
+  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  historyTitle: { fontSize: 20, fontWeight: '900' },
+  historyClose: { padding: 4 },
+  historyLoading: { paddingVertical: 40, alignItems: 'center', gap: 12 },
+  historyLoadingText: { fontSize: 14 },
+  historyContent: {},
+  chartWrap: { alignItems: 'center', marginBottom: 12 },
+  historyList: { marginTop: 8 },
+  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  historyLabel: { fontSize: 15, fontWeight: '600' },
+  historyValue: { fontSize: 15, fontWeight: '800' },
+  audioBriefBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
 });

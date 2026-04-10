@@ -1,0 +1,45 @@
+{
+  "common": {
+    "emergency": "Gaggawa",
+    "doctor": "Likita na",
+    "message": "Aika sako zuwa ga likita",
+    "chat": "Tattaunawar asibiti",
+    "vitals": "Alamun lafiya",
+    "loading": "Yana lodawa...",
+    "call": "Kira",
+    "video": "Bidiyo",
+    "language": "Harshe",
+    "medication": "Maganin",
+    "prescription": "Takardar magani",
+    "verified": "Likita ya tabbatar",
+    "prescribed_by": "Likita {{doctor}} ya ba da",
+    "self_log": "Rikodin kai",
+    "add_prescription": "Ƙara takardar magani",
+    "take": "Sha",
+    "skip": "Tsallake",
+    "logged": "An yi rikodin",
+    "noted": "Mun samu bayanin ku",
+    "success": "An samu nasara",
+    "info_shared": "Na sanar da likitan ku game da wannan.",
+    "how_are_you": "Yaya kike jin kanki a yau?",
+    "hr_is": "Ìwọ̀n ìlù ọkàn rẹ jẹ́ {{hr}} BPM.",
+    "status_is": "Lafiyar ku tana cikin yanayin {{status}}.",
+    "steps_today": "Kun yi taku {{steps}} a yau.",
+    "next_med_at": "Maganin ku na gaba shine {{name}} da karfe {{time}}.",
+    "no_more_meds": "Baku da sauran magunguna da zaku sha a yau."
+  },
+  "home": {
+    "welcome": "Ina kwana",
+    "status": "Lafiya & Tabbatacce",
+    "actions": "Ayyukan gaggawa",
+    "appointments": "Alƙawura masu zuwa"
+  },
+  "med": {
+    "schedule": "Tsarin magani",
+    "name": "Sunan maganin",
+    "dosage": "Yawan magani",
+    "critical": "Mai mahimmanci",
+    "add": "Ƙara magani",
+    "time": "Lokacin sha"
+  }
+}

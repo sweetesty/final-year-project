@@ -1,0 +1,45 @@
+{
+  "common": {
+    "emergency": "Mberede",
+    "doctor": "Dọkịta m",
+    "message": "Zitere dọkịta ozi",
+    "chat": "Nkata gbasara ahụike",
+    "vitals": "Ihe ịrịba ama ndụ",
+    "loading": "Ọ na-ebu...",
+    "call": "Kpọọ",
+    "video": "Vidio",
+    "language": "Asụsụ",
+    "medication": "Ọgwụ",
+    "prescription": "Akwụkwọ ọgwụ",
+    "verified": "Dọkịta kwadoro",
+    "prescribed_by": "Dọkịta {{doctor}} nyere",
+    "self_log": "Nlogota onwe",
+    "add_prescription": "Tinye akwụkwọ ọgwụ",
+    "take": "Ṅụọ",
+    "skip": "Mafere",
+    "logged": "Edekọrọ",
+    "noted": "Anyị natara ozi gị",
+    "success": "Ọ gara nke ọma",
+    "info_shared": "Agwala m dọkịta gị gbasara nke a.",
+    "how_are_you": "Kedu ka ị dị taa?",
+    "hr_is": "Ọkpọọkpọ obi gị bụ {{hr}} BPM.",
+    "status_is": "Ọnọdụ ahụike gị bụ {{status}}.",
+    "steps_today": "I mewo {{steps}} nzọụkwụ taa.",
+    "next_med_at": "Ọgwụ gị ọzọ bụ {{name}} na agogo {{time}}.",
+    "no_more_meds": "Ị nweghị ọgwụ ọ bụla ọzọ ị ga-aṅụ taa."
+  },
+  "home": {
+    "welcome": "Ụtụtụ ọma",
+    "status": "Ahụike & Kwụsiri ike",
+    "actions": "Omume ngwa ngwa",
+    "appointments": "Oge atụrụ anya"
+  },
+  "med": {
+    "schedule": "Usoro ọgwụ",
+    "name": "Aha ọgwụ",
+    "dosage": "Ogo ọgwụ",
+    "critical": "Dị mkpa",
+    "add": "Tinye ọgwụ",
+    "time": "Oge a ga-aṅụ"
+  }
+}

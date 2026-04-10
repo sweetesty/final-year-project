@@ -36,13 +36,43 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Doctor tab */}
+      {/* Doctor Home (Clinical Overview) [NEW] */}
+      <Tabs.Screen
+        name="doctor-home"
+        options={{
+          title: 'Clinical Home',
+          href: isDoctor ? '/doctor-home' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="dashboard" size={size} color={color} />,
+        }}
+      />
+
+      {/* Doctor tab (Clinical Panel - MAIN) */}
       <Tabs.Screen
         name="doctor"
         options={{
-          title: 'Patients',
+          title: 'Clinical Panel',
           href: isDoctor ? '/doctor' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
+        }}
+      />
+
+      {/* Clinical Messages (Inbox) [NEW] */}
+      <Tabs.Screen
+        name="clinical-messages"
+        options={{
+          title: 'Messages',
+          href: isDoctor ? '/clinical-messages' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="chat" size={size} color={color} />,
+        }}
+      />
+
+      {/* Clinical Alerts center */}
+      <Tabs.Screen
+        name="clinical-alerts"
+        options={{
+          title: 'Alerts',
+          href: isDoctor ? '/clinical-alerts' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="notification-important" size={size} color={color} />,
         }}
       />
 
@@ -73,6 +103,16 @@ export default function TabLayout() {
           title: 'Pharmacy',
           href: isDoctor ? null : '/explore',
           tabBarIcon: ({ color, size }) => <MaterialIcons name="local-pharmacy" size={size} color={color} />,
+        }}
+      />
+
+      {/* Clinical Profile */}
+      <Tabs.Screen
+        name="clinical-profile"
+        options={{
+          title: 'Profile',
+          href: isDoctor ? '/clinical-profile' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="account-circle" size={size} color={color} />,
         }}
       />
     </Tabs>

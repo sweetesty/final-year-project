@@ -1,0 +1,45 @@
+{
+  "common": {
+    "emergency": "Emergency",
+    "doctor": "My Doctor",
+    "message": "Message Doctor",
+    "chat": "Clinical Chat",
+    "vitals": "Vitals",
+    "loading": "Loading...",
+    "call": "Call",
+    "video": "Video",
+    "language": "Language",
+    "medication": "Medication",
+    "prescription": "Prescription",
+    "verified": "Verified Prescription",
+    "prescribed_by": "Prescribed by {{doctor}}",
+    "self_log": "Patient Self-Log",
+    "add_prescription": "Add Prescription",
+    "take": "Taken",
+    "skip": "Skip",
+    "logged": "Logged",
+    "noted": "Information noted",
+    "success": "Success",
+    "info_shared": "I have shared this with your doctor.",
+    "how_are_you": "How do you feel today?",
+    "hr_is": "Your heart rate is {{hr}} BPM.",
+    "status_is": "Your health status is {{status}}.",
+    "steps_today": "You have taken {{steps}} steps today.",
+    "next_med_at": "Your next medication is {{name}} due at {{time}}.",
+    "no_more_meds": "You have no more medications due today."
+  },
+  "home": {
+    "welcome": "Good morning",
+    "status": "Healthy & Stable",
+    "actions": "Quick Actions",
+    "appointments": "Upcoming Appointments"
+  },
+  "med": {
+    "schedule": "Daily Schedule",
+    "name": "Medication Name",
+    "dosage": "Dosage",
+    "critical": "Critical",
+    "add": "Add Medication",
+    "time": "Time to Take"
+  }
+}

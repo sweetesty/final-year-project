@@ -1,16 +1,25 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 export default function AddMedicationScreen() {
+  const { mode, patientId: targetId } = useLocalSearchParams<{ mode?: string; patientId?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const { addMedication } = useMedicationViewModel('patient-123');
+  const { t } = useTranslation();
+  const { session } = useAuthViewModel();
+  
+  const activePatientId = targetId || session?.user?.id || '';
+  const { addMedication } = useMedicationViewModel(activePatientId);
+
+  const isPrescribing = mode === 'prescribe';
 
   const [form, setForm] = useState({
     name: '',
@@ -31,16 +40,26 @@ export default function AddMedicationScreen() {
 
     const timeString = `${selectedTime.getHours().toString().padStart(2, '0')}:${selectedTime.getMinutes().toString().padStart(2, '0')}`;
 
-    await addMedication({
-      name: form.name,
-      dosage: form.dosage,
-      instructions: form.instructions,
-      isCritical: form.isCritical,
-      frequency: form.frequency,
-      times: [timeString],
-    });
+    try {
+      await addMedication({
+        name: form.name,
+        dosage: form.dosage,
+        instructions: form.instructions,
+        isCritical: form.isCritical,
+        frequency: form.frequency,
+        times: [timeString],
+        isPrescribed: isPrescribing,
+        prescribedBy: isPrescribing ? (session?.user?.user_metadata?.full_name || 'Dr. Wilson') : undefined
+      });
 
-    router.back();
+      Alert.alert(
+        t('common.success') === 'common.success' ? "Success" : t('common.success'),
+        isPrescribing ? "Prescription added successfully!" : "Medication added to your schedule!",
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to save medication.");
+    }
   };
 
   return (
@@ -48,11 +67,14 @@ export default function AddMedicationScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
-      <Stack.Screen options={{ title: 'Add Medication', headerShown: true }} />
+      <Stack.Screen options={{ 
+        title: isPrescribing ? t('common.add_prescription') : t('med.add'), 
+        headerShown: true 
+      }} />
       
       <ScrollView contentContainerStyle={styles.scrollInner}>
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Medication Name *</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>{t('med.name')} *</Text>
           <TextInput
             style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
             placeholder="e.g. Aspirin"
@@ -63,7 +85,7 @@ export default function AddMedicationScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Dosage *</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>{t('med.dosage')} *</Text>
           <TextInput
             style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
             placeholder="e.g. 500mg, 1 tablet"
@@ -74,7 +96,7 @@ export default function AddMedicationScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Time to Take</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>{t('med.time')}</Text>
           <TouchableOpacity 
             style={[styles.timeSelector, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
             onPress={() => setShowTimePicker(true)}
@@ -82,7 +104,7 @@ export default function AddMedicationScreen() {
             <Text style={{ fontSize: 24, fontWeight: '800', color: themeColors.tint }}>
               {selectedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
-            <Text style={{ color: themeColors.muted }}>Tap to change</Text>
+            <Text style={{ color: themeColors.muted }}>{t('common.language') === 'Èdè' ? 'Fọwọ́tẹ̀ ẹ́ láti yí i padà' : 'Tap to change'}</Text>
           </TouchableOpacity>
           {showTimePicker && (
             <DateTimePicker
@@ -100,8 +122,8 @@ export default function AddMedicationScreen() {
 
         <View style={[styles.toggleRow, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
           <View>
-            <Text style={[styles.toggleLabel, { color: themeColors.text }]}>Critical Medication</Text>
-            <Text style={{ color: themeColors.muted, fontSize: 12 }}>High-priority alarm sound</Text>
+            <Text style={[styles.toggleLabel, { color: themeColors.text }]}>{t('med.critical')}</Text>
+            <Text style={{ color: themeColors.muted, fontSize: 12 }}>{isPrescribing ? 'Mark as clinical priority' : 'High-priority alarm sound'}</Text>
           </View>
           <Switch
             value={form.isCritical}
@@ -126,7 +148,7 @@ export default function AddMedicationScreen() {
           style={[styles.saveButton, { backgroundColor: themeColors.tint }]}
           onPress={handleSave}
         >
-          <Text style={styles.saveButtonText}>Schedule Medication</Text>
+          <Text style={styles.saveButtonText}>{isPrescribing ? t('common.add_prescription') : t('med.add')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

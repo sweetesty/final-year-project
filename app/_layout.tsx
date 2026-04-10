@@ -1,4 +1,6 @@
+import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState } from 'react';
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { AppState } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -13,6 +15,7 @@ import { DataService } from '@/src/services/SupabaseService';
 import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
 import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 import { LocationService } from '@/src/services/LocationService';
+import '@/src/i18n'; // Initialize i18n
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();

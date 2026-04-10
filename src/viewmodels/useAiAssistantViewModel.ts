@@ -35,13 +35,13 @@ export const useAiAssistantViewModel = () => {
       const { data: meds } = await supabase
         .from('medications')
         .select('name, dosage, frequency')
-        .eq('patientId', patientId);
+        .eq('patientid', patientId);
 
       // 2. Fetch Profile
       const { data: profile } = await supabase
         .from('medical_details')
         .select('*')
-        .eq('patientId', patientId)
+        .eq('patientid', patientId)
         .single();
 
       return `

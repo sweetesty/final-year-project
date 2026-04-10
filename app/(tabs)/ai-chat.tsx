@@ -1,17 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useRootNavigationState } from 'expo-router';
 import Animated, { FadeIn, SlideInRight, SlideInLeft } from 'react-native-reanimated';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAiAssistantViewModel, Message } from '@/src/viewmodels/useAiAssistantViewModel';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 export default function AiChatScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const router = useRouter();
+  const { role } = useAuthViewModel();
   const { messages, isLoading, isListening, sendMessage, startVoiceChat } = useAiAssistantViewModel();
   
+  const navigationState = useRootNavigationState();
+  const isNavReady = navigationState?.key;
+
+  // --- Doctor Shield & Redirect ---
+  useEffect(() => {
+    if (isNavReady && role === 'doctor') {
+      router.replace('/doctor-home');
+    }
+  }, [role, isNavReady]);
+
   const [inputText, setInputText] = useState('');
+
   const flatListRef = useRef<FlatList>(null);
 
   const handleSend = () => {
@@ -25,6 +39,15 @@ export default function AiChatScreen() {
     // Scroll to bottom when new messages arrive
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
+
+  // Prevent UI flicker for doctors before redirect
+  if (role === 'doctor') {
+    return (
+      <View style={{ flex: 1, backgroundColor: themeColors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={themeColors.tint} />
+      </View>
+    );
+  }
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isAssistant = item.sender === 'assistant';

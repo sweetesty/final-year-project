@@ -5,7 +5,6 @@ import { Medication } from '../models/Medication';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -73,12 +72,22 @@ export class NotificationService {
     for (const time of times) {
       const [hours, minutes] = time.split(':').map(Number);
 
+      const title = medication.isCritical 
+        ? '⚠️ CRITICAL MEDICATION' 
+        : medication.isPrescribed 
+          ? '📋 PRESCRIBED DOSE' 
+          : '💊 Medication Reminder';
+
+      const body = medication.isPrescribed 
+        ? `It's time for your prescribed ${name}.`
+        : `Reminder to take your ${name}.`;
+
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: isCritical ? '⚠️ CRITICAL MEDICATION' : 'Medication Reminder',
-          body: `It's time to take your ${name}.`,
+          title,
+          body,
           data: { medicationId: medication.id },
-          sound: isCritical ? 'critical' : 'default',
+          sound: medication.isCritical ? 'critical' : 'default',
         },
         trigger: this.getTriggerForFrequency(frequency, hours, minutes, specificDays),
       });

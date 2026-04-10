@@ -44,6 +44,23 @@ export const useAuthViewModel = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Heartbeat: update last_seen every 30 seconds so presence is accurate globally
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const updateLastSeen = async () => {
+      await supabase
+        .from('profiles')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('id', session.user.id);
+    };
+
+    updateLastSeen(); // immediate on open
+    const interval = setInterval(updateLastSeen, 30000); // every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
   const signUp = async (email: string, password: string, fullName: string = '', userRole: 'patient' | 'doctor' = 'patient') => {
     const { data, error } = await supabase.auth.signUp({
       email,

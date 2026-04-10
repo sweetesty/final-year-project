@@ -26,11 +26,11 @@ export class DoctorService {
    * Links a doctor to a patient using the 6-digit code.
    */
   static async linkPatientWithCode(doctorId: string, patientCode: string) {
-    // 1. Find patient by code
+    const sanitizedCode = patientCode.replace(/\s/g, '').replace(/-/g, '');
     const { data: patient, error: findError } = await supabase
       .from('profiles')
       .select('id')
-      .eq('patient_code', patientCode)
+      .eq('patient_code', sanitizedCode)
       .single();
 
     if (findError || !patient) throw new Error("Invalid Patient Code. Please check and try again.");
@@ -62,5 +62,22 @@ export class DoctorService {
 
     if (error) throw error;
     return data.map(d => d.patient);
+  }
+
+  /**
+   * Fetches the assigned doctor for a patient.
+   */
+  static async getLinkedDoctor(patientId: string) {
+    const { data, error } = await supabase
+      .from('doctor_patient_links')
+      .select(`
+        doctor_id,
+        doctor:profiles!doctor_patient_links_doctor_id_fkey(id, full_name, avatar_url, role)
+      `)
+      .eq('patient_id', patientId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.doctor;
   }
 }

@@ -7,12 +7,14 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { DoctorService } from '@/src/services/DoctorService';
 import { ChatService } from '@/src/services/ChatService';
+import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function ClinicalMessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const { session } = useAuthViewModel();
+  const { t } = useTranslation();
   const router = useRouter();
 
   const [conversations, setConversations] = useState<any[]>([]);
@@ -96,12 +98,12 @@ export default function ClinicalMessagesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <Stack.Screen options={{ title: 'Practice Inbox', headerShown: true }} />
+      <Stack.Screen options={{ title: t('doctor.messages_title'), headerShown: true }} />
       
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={themeColors.tint} />
-          <Text style={{ marginTop: 12, color: themeColors.muted }}>Loading conversations...</Text>
+          <Text style={{ marginTop: 12, color: themeColors.muted }}>{t('doctor.loading_conversations')}</Text>
         </View>
       ) : (
         <FlatList
@@ -115,9 +117,9 @@ export default function ClinicalMessagesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <MaterialIcons name="chat-bubble-outline" size={64} color={themeColors.muted} />
-              <Text style={[styles.emptyTitle, { color: themeColors.text }]}>No Conversations Yet</Text>
+              <Text style={[styles.emptyTitle, { color: themeColors.text }]}>{t('doctor.no_conversations')}</Text>
               <Text style={[styles.emptySubtitle, { color: themeColors.muted }]}>
-                Link a patient to start communicating with them and their family.
+                {t('doctor.no_conversations_sub')}
               </Text>
             </View>
           }

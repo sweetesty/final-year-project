@@ -6,12 +6,14 @@ import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAiAssistantViewModel, Message } from '@/src/viewmodels/useAiAssistantViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
+import { useTranslation } from 'react-i18next';
 
 export default function AiChatScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
   const { role } = useAuthViewModel();
+  const { t } = useTranslation();
   const { messages, isLoading, isListening, sendMessage, startVoiceChat } = useAiAssistantViewModel();
   
   const navigationState = useRootNavigationState();
@@ -73,7 +75,7 @@ export default function AiChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
-      <Stack.Screen options={{ title: 'Health Assistant', headerShown: true }} />
+      <Stack.Screen options={{ title: t('ai.title'), headerShown: true }} />
       
       <FlatList
         ref={flatListRef}
@@ -87,7 +89,7 @@ export default function AiChatScreen() {
       {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color={themeColors.tint} />
-          <Text style={{ color: themeColors.muted, fontSize: 12, marginLeft: 8 }}>Companion is thinking...</Text>
+          <Text style={{ color: themeColors.muted, fontSize: 12, marginLeft: 8 }}>{t('ai.thinking')}</Text>
         </View>
       )}
 
@@ -101,7 +103,7 @@ export default function AiChatScreen() {
         
         <TextInput
           style={[styles.input, { backgroundColor: themeColors.card, color: themeColors.text, borderColor: themeColors.border }]}
-          placeholder="Ask me anything..."
+          placeholder={t('ai.placeholder')}
           placeholderTextColor={themeColors.muted}
           value={inputText}
           onChangeText={setInputText}
@@ -113,7 +115,7 @@ export default function AiChatScreen() {
           onPress={handleSend}
           disabled={!inputText.trim()}
         >
-          <Text style={styles.sendButtonText}>Send</Text>
+          <Text style={styles.sendButtonText}>{t('ai.send')}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

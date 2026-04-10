@@ -311,12 +311,12 @@ export default function HomeScreen() {
             <View style={styles.fallSheetTop}>
               <MaterialIcons name="warning" size={32} color="#fff" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.fallSheetTitle}>Fall Detected</Text>
-                <Text style={styles.fallSheetSub}>Emergency alert in 20 seconds</Text>
+                <Text style={styles.fallSheetTitle}>{t('home.fall_detected')}</Text>
+                <Text style={styles.fallSheetSub}>{t('home.fall_alert_sub')}</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.fallCancelBtn} onPress={cancelAlert}>
-              <Text style={styles.fallCancelText}>I'm OK — Cancel Alert</Text>
+              <Text style={styles.fallCancelText}>{t('home.fall_cancel')}</Text>
             </TouchableOpacity>
           </LinearGradient>
         </Animated.View>
@@ -410,14 +410,14 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { color: C.text }]}>{t('common.vitals')}</Text>
             <View style={styles.sectionLive}>
               <LiveDot color="#10B981" />
-              <Text style={[styles.sectionLiveText, { color: C.muted }]}>Real-time</Text>
+              <Text style={[styles.sectionLiveText, { color: C.muted }]}>{t('home.real_time')}</Text>
             </View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vitalsRow}>
-            <VitalTile icon="favorite"       value={vitals.heartRate} unit="BPM"  label="Heart Rate"   color="#EF4444" delay={0}   />
-            <VitalTile icon="air"            value={`${vitals.spo2}%`} unit="SpO2" label="Blood Oxygen"  color="#3B82F6" delay={60}  />
-            <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit="steps" label="Steps Today" color="#10B981" delay={120} onAction={showHistory} />
-            <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label="Active Time"  color="#8B5CF6" delay={180} />
+            <VitalTile icon="favorite"       value={vitals.heartRate} unit="BPM"  label={t('home.heart_rate')}   color="#EF4444" delay={0}   />
+            <VitalTile icon="air"            value={`${vitals.spo2}%`} unit="SpO2" label={t('home.blood_oxygen')}  color="#3B82F6" delay={60}  />
+            <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit={t('common.steps_today').split(' ')[0]} label={t('home.steps_today')} color="#10B981" delay={120} onAction={showHistory} />
+            <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label={t('home.active_time')}  color="#8B5CF6" delay={180} />
           </ScrollView>
         </View>
 
@@ -436,8 +436,8 @@ export default function HomeScreen() {
                   <MaterialIcons name="smart-toy" size={26} color="#fff" />
                 </View>
                 <View>
-                  <Text style={styles.aiBannerTitle}>AI Health Companion</Text>
-                  <Text style={styles.aiBannerSub}>Ask anything about your health</Text>
+                  <Text style={styles.aiBannerTitle}>{t('home.ai_companion')}</Text>
+                  <Text style={styles.aiBannerSub}>{t('home.ai_companion_sub')}</Text>
                 </View>
               </View>
               <MaterialIcons name="chevron-right" size={24} color="rgba(255,255,255,0.6)" />
@@ -452,10 +452,10 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: C.text }]}>{t('home.actions')}</Text>
           <View style={styles.actionsGrid}>
             {[
-              { icon: 'location-on',    label: 'Live Map',     sub: 'Track location',  color: '#6366F1', route: '/live-tracking' },
-              { icon: 'medication',     label: 'Medications',  sub: 'Schedule & doses', color: '#EC4899', route: '/medication' },
-              { icon: 'phone-in-talk',  label: t('common.emergency'),   sub: 'SOS contacts',    color: '#EF4444', route: '/emergency-contacts' },
-              { icon: 'local-hospital', label: t('common.doctor'), sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : 'Direct Contact', color: '#10B981', route: '/(tabs)/doctor' },
+              { icon: 'location-on',    label: t('home.live_map'),     sub: t('home.track_location'),  color: '#6366F1', route: '/live-tracking' },
+              { icon: 'medication',     label: t('common.medication'),  sub: t('home.schedule_doses'), color: '#EC4899', route: '/medication' },
+              { icon: 'phone-in-talk',  label: t('common.emergency'),   sub: t('home.sos_contacts'),    color: '#EF4444', route: '/emergency-contacts' },
+              { icon: 'local-hospital', label: t('common.doctor'), sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : t('home.direct_contact'), color: '#10B981', route: '/(tabs)/doctor' },
             ].map((a, i) => (
               <Animated.View key={a.label} entering={FadeInDown.delay(360 + i * 50).duration(380)} style={{ width: (width - Spacing.lg * 2 - 12) / 2 }}>
                 <TouchableOpacity
@@ -478,12 +478,12 @@ export default function HomeScreen() {
             HEALTH SUMMARY  — clinical row with 3 key numbers
         ════════════════════════════════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.delay(560).duration(400)} style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Summary</Text>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>{t('home.todays_summary')}</Text>
           <View style={[styles.summaryCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
             {[
-              { label: 'Resting HR',  value: `${vitals.heartRate} bpm`, icon: 'favorite',       color: '#EF4444' },
-              { label: 'Blood O₂',   value: `${vitals.spo2}%`,         icon: 'bubble-chart',   color: '#3B82F6' },
-              { label: 'Steps',      value: vitals.steps.toLocaleString(), icon: 'show-chart',  color: '#10B981' },
+              { label: t('home.heart_rate'),  value: `${vitals.heartRate} bpm`, icon: 'favorite',       color: '#EF4444' },
+              { label: t('home.blood_oxygen'),   value: `${vitals.spo2}%`,         icon: 'bubble-chart',   color: '#3B82F6' },
+              { label: t('home.steps_today'),      value: vitals.steps.toLocaleString(), icon: 'show-chart',  color: '#10B981' },
             ].map((s, i) => (
               <React.Fragment key={s.label}>
                 <View style={styles.summaryItem}>
@@ -505,8 +505,8 @@ export default function HomeScreen() {
             <MaterialIcons name="tips-and-updates" size={18} color="#3B82F6" />
             <Text style={[styles.insightText, { color: isDark ? '#93C5FD' : '#1D4ED8' }]}>
               {vitals.heartRate < 80
-                ? `Heart rate stable at ${vitals.heartRate} bpm — you're doing well today.`
-                : `Heart rate is elevated at ${vitals.heartRate} bpm — consider resting.`}
+                ? t('home.hr_stable', { hr: vitals.heartRate })
+                : t('home.hr_elevated', { hr: vitals.heartRate })}
             </Text>
           </View>
         </Animated.View>
@@ -519,7 +519,7 @@ export default function HomeScreen() {
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setHistoryVisible(false)} />
           <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
             <View style={styles.historyHeader}>
-              <Text style={[styles.historyTitle, { color: C.text }]}>Step History</Text>
+              <Text style={[styles.historyTitle, { color: C.text }]}>{t('home.step_history')}</Text>
               <TouchableOpacity onPress={() => setHistoryVisible(false)} style={styles.historyClose}>
                 <MaterialIcons name="close" size={24} color={C.muted} />
               </TouchableOpacity>
@@ -528,7 +528,7 @@ export default function HomeScreen() {
             {loadingHistory ? (
               <View style={styles.historyLoading}>
                 <ActivityIndicator size="large" color="#10B981" />
-                <Text style={[styles.historyLoadingText, { color: C.muted }]}>Fetching history...</Text>
+                <Text style={[styles.historyLoadingText, { color: C.muted }]}>{t('home.fetching_history')}</Text>
               </View>
             ) : (
               <View style={styles.historyContent}>

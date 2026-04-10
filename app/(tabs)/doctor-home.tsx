@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { supabase } from '@/src/services/SupabaseService';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { VitalsTrendChart } from '@/src/components/AnalyticsCharts';
 
 const { width } = Dimensions.get('window');
@@ -16,6 +17,7 @@ export default function DoctorHomeScreen() {
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const { session } = useAuthViewModel();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [stats, setStats] = useState({ patients: 0, alerts: 0 });
   const [linkedPatients, setLinkedPatients] = useState<any[]>([]);
@@ -118,12 +120,12 @@ export default function DoctorHomeScreen() {
       style={[styles.container, { backgroundColor: themeColors.background }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.tint} />}
     >
-      <Stack.Screen options={{ title: 'Clinical Home', headerShown: false }} />
+      <Stack.Screen options={{ title: t('doctor.home_title'), headerShown: false }} />
       
       <LinearGradient colors={[themeColors.tint, themeColors.tint + 'CC']} style={styles.header}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.greeting}>Good Day,</Text>
+            <Text style={styles.greeting}>{t('home.good_afternoon')},</Text>
             <Text style={styles.drName}>Dr. {doctorName.split(' ')[0]}</Text>
           </View>
           <TouchableOpacity style={styles.notifBtn}>
@@ -135,25 +137,25 @@ export default function DoctorHomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{stats.patients}</Text>
-            <Text style={styles.statLabel}>Active Patients</Text>
+            <Text style={styles.statLabel}>{t('doctor.active_patients')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={[styles.statValue, stats.alerts > 0 && { color: '#FECACA' }]}>{stats.alerts}</Text>
-            <Text style={styles.statLabel}>Recent Alerts</Text>
+            <Text style={styles.statLabel}>{t('doctor.recent_alerts')}</Text>
           </View>
         </View>
       </LinearGradient>
 
       <View style={styles.content}>
-        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Clinical Monitoring</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>{t('doctor.clinical_monitoring')}</Text>
 
         {loading ? (
           <ActivityIndicator color={themeColors.tint} style={{ marginVertical: 24 }} />
         ) : linkedPatients.length === 0 ? (
           <View style={[styles.chartContainer, { backgroundColor: themeColors.card, alignItems: 'center', padding: 32 }]}>
             <MaterialIcons name="people-outline" size={48} color={themeColors.muted} />
-            <Text style={{ color: themeColors.muted, marginTop: 12, textAlign: 'center' }}>No linked patients yet.{'\n'}Go to the Clinical Panel tab to link a patient.</Text>
+            <Text style={{ color: themeColors.muted, marginTop: 12, textAlign: 'center' }}>{t('doctor.no_patients')}</Text>
           </View>
         ) : (
           linkedPatients.map((patient: any) => (
@@ -183,7 +185,7 @@ export default function DoctorHomeScreen() {
 
               {selectedMonitorPatient?.id === patient.id && (
                 <View style={{ marginTop: 16 }}>
-                  <Text style={[styles.chartNote, { color: themeColors.muted, marginBottom: 8 }]}>7-Day Vitals Overview</Text>
+                  <Text style={[styles.chartNote, { color: themeColors.muted, marginBottom: 8 }]}>{t('doctor.vitals_overview')}</Text>
                   <VitalsTrendChart 
                     labels={['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
                     data={[72, 75, 71, 78, 74, 72, 73]}

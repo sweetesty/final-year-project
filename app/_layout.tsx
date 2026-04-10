@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { AppState } from 'react-native';
@@ -23,6 +24,7 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { session, loading } = useAuthViewModel();
+  const { t } = useTranslation();
   const segments = useSegments();
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
@@ -108,11 +110,11 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="medical-details" options={{ title: 'Medical Profile' }} />
-        <Stack.Screen name="emergency-contacts" options={{ title: 'Emergency Contacts' }} />
-        <Stack.Screen name="add-medication" options={{ title: 'Add Medication' }} />
-        <Stack.Screen name="live-tracking" options={{ title: 'Live Location' }} />
-        <Stack.Screen name="chat-room" options={{ title: 'Clinical Chat' }} />
+        <Stack.Screen name="medical-details" options={{ title: t('nav.medical_profile') }} />
+        <Stack.Screen name="emergency-contacts" options={{ title: t('nav.emergency_contacts') }} />
+        <Stack.Screen name="add-medication" options={{ title: t('nav.add_medication') }} />
+        <Stack.Screen name="live-tracking" options={{ title: t('nav.live_location') }} />
+        <Stack.Screen name="chat-room" options={{ title: t('nav.clinical_chat') }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

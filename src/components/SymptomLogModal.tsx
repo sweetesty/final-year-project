@@ -44,7 +44,7 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
   };
 
   const handleWellness = () => {
-    SpeechService.speak(`Great to hear, ${userName}. Keep it up!`, i18n.language);
+    SpeechService.speak(`${t('home.im_ok')}. ${userName}!`, i18n.language);
     onClose();
   };
 
@@ -82,15 +82,15 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
             <View style={styles.headerIcon}>
               <MaterialIcons name="health-and-safety" size={28} color="#fff" />
             </View>
-            <Text style={styles.headerTitle}>Daily Check-in</Text>
-            <Text style={styles.headerSub}>How are you feeling today, {userName}?</Text>
+            <Text style={styles.headerTitle}>{t('home.daily_checkin')}</Text>
+            <Text style={styles.headerSub}>{t('common.how_are_you')}</Text>
           </LinearGradient>
 
           {/* ── Body ────────────────────────────────────────────── */}
           <View style={[styles.body, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
 
             <Text style={[styles.sectionLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              TAP IF YOU ARE EXPERIENCING
+              {t('home.experiencing')}
             </Text>
 
             {/* Symptom grid — 3 columns */}
@@ -125,14 +125,14 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
                 end={{ x: 1, y: 0 }}
               >
                 <MaterialIcons name="check-circle" size={20} color="#fff" />
-                <Text style={styles.wellnessBtnText}>I'm Feeling Well</Text>
+                <Text style={styles.wellnessBtnText}>{t('home.im_ok')}</Text>
               </LinearGradient>
             </TouchableOpacity>
 
             {/* Skip */}
             <TouchableOpacity onPress={onClose} style={styles.skipBtn}>
               <Text style={[styles.skipText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                Skip for now
+                {t('home.skip_now')}
               </Text>
             </TouchableOpacity>
           </View>

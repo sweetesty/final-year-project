@@ -20,8 +20,8 @@ export default function ClinicalProfileScreen() {
 
   const handleSignOut = async () => {
     Alert.alert(
-      "Secure Logout",
-      "Are you sure you want to end your clinical session?",
+      t('doctor.secure_logout'),
+      t('doctor.logout_confirm'),
       [
         { text: "Cancel", style: "cancel" },
         { 
@@ -63,27 +63,27 @@ export default function ClinicalProfileScreen() {
           </View>
         </View>
         <Text style={[styles.name, { color: themeColors.text }]}>{doctorName}</Text>
-        <Text style={[styles.specialty, { color: themeColors.muted }]}>Senior Medical Officer</Text>
+        <Text style={[styles.specialty, { color: themeColors.muted }]}>{t('doctor.specialist')}</Text>
       </LinearGradient>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>Clinical Identification</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>{t('doctor.clinical_id')}</Text>
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <ProfileItem icon="email" label="Hospital Email" value={doctorEmail} />
-          <ProfileItem icon="badge" label="Medical ID" value="KNS-992-001" />
-          <ProfileItem icon="apartment" label="Facility" value="Vitals Fusion Health Center" />
+          <ProfileItem icon="email" label={t('doctor.hospital_email')} value={doctorEmail} />
+          <ProfileItem icon="badge" label={t('doctor.medical_id')} value="KNS-992-001" />
+          <ProfileItem icon="apartment" label={t('doctor.facility')} value="Vitals Fusion Health Center" />
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>System Settings</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>{t('doctor.system_settings')}</Text>
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
           <TouchableOpacity style={[styles.profileItem, { borderBottomWidth: 0 }]}>
             <View style={[styles.iconBox, { backgroundColor: '#10B98115' }]}>
               <MaterialIcons name="security" size={22} color="#10B981" />
             </View>
             <View style={styles.itemContent}>
-              <Text style={[styles.itemValue, { color: themeColors.text }]}>Security & Encryption</Text>
+              <Text style={[styles.itemValue, { color: themeColors.text }]}>{t('doctor.security')}</Text>
             </View>
             <MaterialIcons name="chevron-right" size={24} color={themeColors.muted} />
           </TouchableOpacity>
@@ -95,11 +95,11 @@ export default function ClinicalProfileScreen() {
         onPress={handleSignOut}
       >
         <MaterialIcons name="logout" size={20} color="#EF4444" />
-        <Text style={styles.logoutText}>Secure Logout</Text>
+        <Text style={styles.logoutText}>{t('doctor.secure_logout')}</Text>
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Text style={[styles.version, { color: themeColors.muted }]}>Clinical Command Center v2.4.0 (Doctor Mode)</Text>
+        <Text style={[styles.version, { color: themeColors.muted }]}>{t('doctor.version')}</Text>
       </View>
     </ScrollView>
   );

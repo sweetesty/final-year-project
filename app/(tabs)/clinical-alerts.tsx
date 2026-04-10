@@ -161,12 +161,12 @@ export default function ClinicalAlertsScreen() {
       <View style={styles.statsStrip}>
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: '#EF4444' }]}>{alerts.filter(a => a.severity === 'critical').length}</Text>
-          <Text style={[styles.statLabel, { color: themeColors.muted }]}>Critical</Text>
+          <Text style={[styles.statLabel, { color: themeColors.muted }]}>{t('doctor.critical')}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: '#F59E0B' }]}>{alerts.filter(a => a.severity === 'warning').length}</Text>
-          <Text style={[styles.statLabel, { color: themeColors.muted }]}>Warnings</Text>
+          <Text style={[styles.statLabel, { color: themeColors.muted }]}>{t('doctor.warnings')}</Text>
         </View>
       </View>
 
@@ -186,8 +186,8 @@ export default function ClinicalAlertsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MaterialIcons name="check-circle" size={64} color="#10B981" />
-              <Text style={[styles.emptyTitle, { color: themeColors.text }]}>No Active Alerts</Text>
-              <Text style={[styles.emptySubtitle, { color: themeColors.muted }]}>All your patients are currently within normal health ranges.</Text>
+              <Text style={[styles.emptyTitle, { color: themeColors.text }]}>{t('doctor.no_alerts')}</Text>
+              <Text style={[styles.emptySubtitle, { color: themeColors.muted }]}>{t('doctor.no_alerts_sub')}</Text>
             </View>
           }
         />

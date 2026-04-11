@@ -2,8 +2,8 @@ import { supabase } from './SupabaseService';
 import { OfflineSyncService } from './OfflineSyncService';
 
 export interface VitalsReading {
-  patientId: string;
-  heartRate: number;
+  patientid: string;
+  heartrate: number;
   spo2: number;
   steps: number;
   timestamp: string;
@@ -12,12 +12,12 @@ export interface VitalsReading {
 export class VitalsService {
   /**
    * Persist a vitals reading to Supabase (offline-safe).
-   * Column names must match the DB: patientid (lowercase), heartRate, spo2, steps.
+   * Column names must match the DB: patientid (lowercase), heartrate, spo2, steps.
    */
   static async logVitals(reading: VitalsReading): Promise<void> {
     await OfflineSyncService.write('vitals', 'insert', {
-      patientid: reading.patientId,
-      heartrate: reading.heartRate,
+      patientid: reading.patientid,
+      heartrate: reading.heartrate,
       spo2: reading.spo2,
       steps: reading.steps,
       timestamp: reading.timestamp,

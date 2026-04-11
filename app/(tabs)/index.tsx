@@ -44,7 +44,7 @@ const { width } = Dimensions.get('window');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Vitals = { heartRate: number; spo2: number; steps: number; activeMin: number };
+type Vitals = { heartrate: number; spo2: number; steps: number; activeMin: number };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ export default function HomeScreen() {
   const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientId, patientName);
 
   const [patientCode, setPatientCode] = useState('––– –––');
-  const [vitals, setVitals] = useState<Vitals>({ heartRate: 72, spo2: 98, steps: 1240, activeMin: 42 });
+  const [vitals, setVitals] = useState<Vitals>({ heartrate: 72, spo2: 98, steps: 1240, activeMin: 42 });
 
   // Symptom Prompt & Diagnostic Logging
   useEffect(() => {
@@ -250,15 +250,15 @@ export default function HomeScreen() {
 
         if (patientId && patientId !== '') {
           VitalsService.logVitals({ 
-            patientId, 
-            heartRate: hr, 
+            patientid: patientId, 
+            heartrate: hr, 
             spo2, 
             steps: nextSteps, 
             timestamp: new Date().toISOString() 
           }).catch(err => console.error('[VitalsService] simulation error:', err));
         }
 
-        return { ...prev, heartRate: hr, spo2, activeMin: nextMins };
+        return { ...prev, heartrate: hr, spo2, activeMin: nextMins };
       });
 
       if (hr > 95) SpeechService.speak(`${firstName}, your heart rate is ${hr} BPM. Please rest.`, i18n.language);
@@ -278,7 +278,7 @@ export default function HomeScreen() {
     const lng = i18n.language;
     
     // 1. Localized Vitals & Status
-    const hrText = t('common.hr_is', { hr: vitals.heartRate });
+    const hrText = t('common.hr_is', { hr: vitals.heartrate });
     const statusText = t('common.status_is', { status: zone.label });
     const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
     
@@ -380,7 +380,7 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.headerHRValue}>
-              <Text style={styles.headerHRNumber}>{vitals.heartRate}</Text>
+              <Text style={styles.headerHRNumber}>{vitals.heartrate}</Text>
               <Text style={styles.headerHRUnit}>BPM</Text>
             </View>
           </Animated.View>
@@ -417,7 +417,7 @@ export default function HomeScreen() {
             </View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vitalsRow}>
-            <VitalTile icon="favorite"       value={vitals.heartRate} unit="BPM"  label={t('home.heart_rate')}   color="#EF4444" delay={0}   />
+            <VitalTile icon="favorite"       value={vitals.heartrate} unit="BPM"  label={t('home.heart_rate')}   color="#EF4444" delay={0}   />
             <VitalTile icon="air"            value={`${vitals.spo2}%`} unit="SpO2" label={t('home.blood_oxygen')}  color="#3B82F6" delay={60}  />
             <VitalTile icon="directions-walk" value={vitals.steps.toLocaleString()} unit={t('common.steps_today').split(' ')[0]} label={t('home.steps_today')} color="#10B981" delay={120} onAction={showHistory} />
             <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label={t('home.active_time')}  color="#8B5CF6" delay={180} />
@@ -484,7 +484,7 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: C.text }]}>{t('home.todays_summary')}</Text>
           <View style={[styles.summaryCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
             {[
-              { label: t('home.heart_rate'),  value: `${vitals.heartRate} bpm`, icon: 'favorite',       color: '#EF4444' },
+              { label: t('home.heart_rate'),  value: `${vitals.heartrate} bpm`, icon: 'favorite',       color: '#EF4444' },
               { label: t('home.blood_oxygen'),   value: `${vitals.spo2}%`,         icon: 'bubble-chart',   color: '#3B82F6' },
               { label: t('home.steps_today'),      value: vitals.steps.toLocaleString(), icon: 'show-chart',  color: '#10B981' },
             ].map((s, i) => (
@@ -507,9 +507,9 @@ export default function HomeScreen() {
           <View style={[styles.insightStrip, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.08)', borderColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.2)' }]}>
             <MaterialIcons name="tips-and-updates" size={18} color="#3B82F6" />
             <Text style={[styles.insightText, { color: isDark ? '#93C5FD' : '#1D4ED8' }]}>
-              {vitals.heartRate < 80
-                ? t('home.hr_stable', { hr: vitals.heartRate })
-                : t('home.hr_elevated', { hr: vitals.heartRate })}
+              {vitals.heartrate < 80
+                ? t('home.hr_stable', { hr: vitals.heartrate })
+                : t('home.hr_elevated', { hr: vitals.heartrate })}
             </Text>
           </View>
         </Animated.View>

@@ -64,7 +64,7 @@ export const useFallDetectionViewModel = (
     const { data: links } = await supabase
       .from('doctor_patient_links')
       .select('doctor_id')
-      .eq('patient_id', patientId);
+      .eq('patientid', patientId);
 
     if (links?.length) {
       const { data: doctors } = await supabase

@@ -38,7 +38,7 @@ export default function ClinicalAlertsScreen() {
       // 1. Get linked patients
       const { data: links } = await supabase
         .from('doctor_patient_links')
-        .select('patient_id, patient:profiles!doctor_patient_links_patient_id_fkey(full_name)')
+        .select('patientid, patient:profiles!patientid(full_name)')
         .eq('doctor_id', session.user.id);
 
       if (!links || links.length === 0) {
@@ -46,9 +46,9 @@ export default function ClinicalAlertsScreen() {
         return;
       }
 
-      const patientIds = links.map(l => l.patient_id);
+      const patientIds = links.map(l => l.patientid);
       const patientMap = links.reduce((acc: any, curr: any) => {
-        acc[curr.patient_id] = curr.patient?.full_name || 'Unknown Patient';
+        acc[curr.patientid] = curr.patient?.full_name || 'Unknown Patient';
         return acc;
       }, {});
 

@@ -27,7 +27,7 @@ export default function LiveTrackingScreen() {
       const { data } = await supabase
         .from('patient_locations')
         .select('*')
-        .eq('patientId', patientId)
+        .eq('patientid', patientId)
         .order('timestamp', { ascending: false })
         .limit(20);
 
@@ -44,7 +44,7 @@ export default function LiveTrackingScreen() {
         event: 'INSERT',
         schema: 'public',
         table: 'patient_locations',
-        filter: `patientId=eq.${patientId}`
+        filter: `patientid=eq.${patientId}`
       }, (payload) => {
         setLocations(prev => [...prev, payload.new].slice(-20));
       })

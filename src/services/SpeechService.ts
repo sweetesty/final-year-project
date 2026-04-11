@@ -1,6 +1,7 @@
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import * as FileSystem from 'expo-file-system';
+import { encode } from 'base64-arraybuffer';
 
 // ElevenLabs voice IDs — "Rachel" is calm, warm, natural (great for health apps)
 const VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel
@@ -11,6 +12,17 @@ const MULTILINGUAL_LANGS = ['yo', 'ig', 'ha'];
 const EL_API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY ?? '';
 
 let _sound: Audio.Sound | null = null;
+
+/**
+ * Creates a stable filename for a given text and language.
+ * Used to avoid re-downloading the same audio (Saving Credits!).
+ */
+function _getCacheKey(text: string, lng: string): string {
+  // Simple alphanumeric hash for filename safety
+  const clean = text.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 30);
+  const hash = text.length + text.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+  return `el_${lng}_${clean}_${Math.abs(hash)}.mp3`;
+}
 
 async function _stopCurrent() {
   if (_sound) {
@@ -23,65 +35,80 @@ async function _stopCurrent() {
 }
 
 async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
-  if (!EL_API_KEY) return false;
+  if (!EL_API_KEY || EL_API_KEY === 'her_key_here') {
+    return false;
+  }
 
   try {
-    const isMultilingual = MULTILINGUAL_LANGS.some(l => lng.startsWith(l));
-    const modelId = isMultilingual
-      ? 'eleven_multilingual_v2'
-      : 'eleven_turbo_v2_5'; // fastest + most natural for English
+    const cacheKey = _getCacheKey(text, lng);
+    const cacheUri = FileSystem.documentDirectory + 'audio_cache/' + cacheKey;
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': EL_API_KEY,
-          'Content-Type': 'application/json',
-          Accept: 'audio/mpeg',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: modelId,
-          voice_settings: {
-            stability: 0.55,        // slight variation → feels human
-            similarity_boost: 0.80, // stays true to Rachel's voice
-            style: 0.20,            // gentle expressiveness
-            use_speaker_boost: true,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      console.warn('[SpeechService] ElevenLabs API error:', response.status);
-      return false;
+    // 1. Ensure cache directory exists
+    const dirInfo = await FileSystem.getInfoAsync(FileSystem.documentDirectory + 'audio_cache/');
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'audio_cache/', { intermediates: true });
     }
 
-    // Write audio blob to a temp file (expo-av needs a URI)
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = _arrayBufferToBase64(arrayBuffer);
-    const uri = FileSystem.cacheDirectory + `el_tts_${Date.now()}.mp3`;
-    await FileSystem.writeAsStringAsync(uri, base64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    // 2. Check if we already have this audio saved (Credit Saver!)
+    const cacheInfo = await FileSystem.getInfoAsync(cacheUri);
+    let playUri = cacheUri;
 
+    if (cacheInfo.exists) {
+      console.log('[SpeechService] Using Cached Local Audio (Credit Saved!):', cacheKey);
+    } else {
+      console.log('[SpeechService] Generating New ElevenLabs Audio...');
+      const isMultilingual = MULTILINGUAL_LANGS.some(l => lng.startsWith(l));
+      const modelId = isMultilingual ? 'eleven_multilingual_v2' : 'eleven_turbo_v2_5';
+
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': EL_API_KEY,
+            'Content-Type': 'application/json',
+            Accept: 'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text,
+            model_id: modelId,
+            voice_settings: {
+              stability: 0.55,
+              similarity_boost: 0.80,
+              style: 0.20,
+              use_speaker_boost: true,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        console.warn('[SpeechService] ElevenLabs API error:', response.status);
+        return false;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = encode(arrayBuffer);
+      await FileSystem.writeAsStringAsync(cacheUri, base64, {
+        encoding: 'base64' as any,
+      });
+    }
+
+    // 3. Play the audio (either freshly downloaded or cached)
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
     });
 
     const { sound } = await Audio.Sound.createAsync(
-      { uri },
+      { uri: playUri },
       { shouldPlay: true, volume: 1.0 }
     );
     _sound = sound;
 
-    // Clean up after playback finishes
     sound.setOnPlaybackStatusUpdate((status) => {
       if (status.isLoaded && status.didJustFinish) {
         sound.unloadAsync().catch(() => {});
-        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
         if (_sound === sound) _sound = null;
       }
     });
@@ -93,16 +120,8 @@ async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
   }
 }
 
-function _arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 function _fallbackSpeak(text: string, lng?: string) {
+  console.log('[SpeechService] Playing Native Robot Voice (Fallback)');
   let languageCode = 'en-US';
   const clean = lng?.toLowerCase() ?? 'en';
   if (clean.startsWith('yo')) languageCode = 'yo-NG';
@@ -117,7 +136,6 @@ export class SpeechService {
     if (!text) return;
 
     try {
-      // Stop anything currently playing
       await _stopCurrent();
       await Speech.stop();
 

@@ -1,13 +1,13 @@
 export interface HealthVital {
   id: string;
-  patientId: string;
+  patientid: string;
   timestamp: string;
-  heartRate?: number;
+  heartrate?: number;
   bloodPressure?: {
     systolic: number;
     diastolic: number;
   };
-  oxygenLevel?: number; // SpO2
+  spo2?: number; // SpO2
   temperature?: number;
 }
 
@@ -26,7 +26,7 @@ export interface SensorData {
 }
 
 export interface VitalHistory {
-  patientId: string;
+  patientid: string;
   vitals: HealthVital[];
   timeframe: 'day' | 'week' | 'month';
 }

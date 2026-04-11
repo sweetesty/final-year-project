@@ -107,7 +107,7 @@
   "doctor": {
     "home_title": "Gidan Asibiti",
     "panel_title": "Filin Asibiti",
-    "messages_title": "Akwatin Aikin Gaba",
+    "messages_title": "Saƙonni",
     "alerts_title": "Faɗakarwar Asibiti",
     "profile_title": "Bayanan Likita",
     "active_patients": "Marasa Lafiya Masu Aiki",
@@ -143,7 +143,11 @@
     "facility": "Cibiya",
     "system_settings": "Saitunan Tsarin",
     "security": "Tsaro & Ɓoye Bayani",
-    "version": "Cibiyar Umarni ta Asibiti v2.4.0 (Yanayin Likita)"
+    "version": "Cibiyar Umarni ta Asibiti v2.4.0 (Yanayin Likita)",
+    "active_emergencies": "Active Emergencies",
+    "condition": "Condition",
+    "accept_case": "Accept Case",
+    "view_clinical_profile": "View Clinical Profile"
   },
   "pharmacy": {
     "title": "Kantin Magani",

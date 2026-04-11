@@ -107,8 +107,8 @@
   "doctor": {
     "home_title": "Ụlọ Ọgwụ",
     "panel_title": "Paneli Ọgwụ",
-    "messages_title": "Igbe Ozi Ọrụ",
-    "alerts_title": "Ịdọ Aka Ọgwụ",
+    "messages_title": "Ozi",
+    "alerts_title": "Ịdọ aka ná ntị Ahụike",
     "profile_title": "Profaịlụ Dọkịta",
     "active_patients": "Ndị Ọrịa Na-arụ Ọrụ",
     "recent_alerts": "Ịdọ Aka Ọhụrụ",
@@ -143,7 +143,11 @@
     "facility": "Ebe Ọrụ",
     "system_settings": "Ntọala Sistemụ",
     "security": "Nchekwa & Nzuzo",
-    "version": "Ebe Ọrụ Ọgwụ v2.4.0 (Ụzọ Dọkịta)"
+    "version": "Ụlọ Ọrụ Ahụike v2.4.0 (Doctor Mode)",
+    "active_emergencies": "Active Emergencies",
+    "condition": "Condition",
+    "accept_case": "Accept Case",
+    "view_clinical_profile": "View Clinical Profile"
   },
   "pharmacy": {
     "title": "Ụlọ Ọgwụ",

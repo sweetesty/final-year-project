@@ -107,7 +107,7 @@
   "doctor": {
     "home_title": "Clinical Home",
     "panel_title": "Clinical Panel",
-    "messages_title": "Practice Inbox",
+    "messages_title": "Messages",
     "alerts_title": "Clinical Alerts",
     "profile_title": "Doctor Profile",
     "active_patients": "Active Patients",
@@ -143,7 +143,11 @@
     "facility": "Facility",
     "system_settings": "System Settings",
     "security": "Security & Encryption",
-    "version": "Clinical Command Center v2.4.0 (Doctor Mode)"
+    "version": "Clinical Command Center v2.4.0 (Doctor Mode)",
+    "active_emergencies": "Active Emergencies",
+    "condition": "Condition",
+    "accept_case": "Accept Case",
+    "view_clinical_profile": "View Clinical Profile"
   },
   "pharmacy": {
     "title": "Pharmacy",

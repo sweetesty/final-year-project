@@ -134,6 +134,29 @@ export default function DoctorDashboard() {
     }
   };
 
+  const [history, setHistory] = useState<any[]>([]);
+  const [patientContext, setPatientContext] = useState<any>(null);
+
+  useEffect(() => {
+    if (selectedPatient) {
+      loadPatientDetails();
+    }
+  }, [selectedPatient]);
+
+  const loadPatientDetails = async () => {
+    if (!selectedPatient) return;
+    try {
+      const [hist, context] = await Promise.all([
+        DoctorService.getPatientAlertHistory(selectedPatient.id),
+        DoctorService.getPatientClinicalContext(selectedPatient.id)
+      ]);
+      setHistory(hist);
+      setPatientContext(context);
+    } catch (e) {
+      console.error('[Doctor] Detail load error:', e);
+    }
+  };
+
   if (loading) return <View style={styles.centered}><ActivityIndicator color={themeColors.tint} /></View>;
 
   // ─── Patient View ──────────────────────────────────────────────────────────
@@ -246,24 +269,38 @@ export default function DoctorDashboard() {
         <View 
           style={[
             styles.premiumHeader, 
-            { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)' }
+            { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)' }
           ]}
         >
           <TouchableOpacity
-            style={[styles.miniBackBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
+            style={[styles.miniBackBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
             onPress={() => setSelectedPatient(null)}
           >
             <MaterialIcons name="chevron-left" size={28} color={themeColors.tint} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={[styles.headerPatientName, { color: themeColors.text }]}>{selectedPatient.full_name}</Text>
-            <StatusIndicator theme={themeColors} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+               <View style={[styles.pulseDot, { backgroundColor: patientContext?.isOnline ? '#10B981' : '#94A3B8' }]} />
+               <Text style={{ fontSize: 12, color: themeColors.muted, fontWeight: '700' }}>
+                  {patientContext?.isOnline ? 'ACTIVE' : 'OFFLINE'}
+               </Text>
+            </View>
           </View>
           <View style={styles.headerControls}>
-             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]} onPress={startVideoCall}>
+             <TouchableOpacity 
+                style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]} 
+                onPress={() => Linking.openURL('tel:+123456789')}
+              >
+                <MaterialIcons name="call" size={20} color="#fff" />
+             </TouchableOpacity>
+             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={startVideoCall}>
                 <MaterialIcons name="videocam" size={20} color="#fff" />
              </TouchableOpacity>
-             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedPatient.id, partnerName: selectedPatient.full_name } })}>
+             <TouchableOpacity 
+                style={[styles.roundIconBtn, { backgroundColor: '#475569' }]} 
+                onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedPatient.id, partnerName: selectedPatient.full_name } })}
+              >
                 <MaterialIcons name="chat-bubble" size={18} color="#fff" />
              </TouchableOpacity>
           </View>
@@ -272,38 +309,59 @@ export default function DoctorDashboard() {
         <ScrollView contentContainerStyle={styles.scrollWithHeader} showsVerticalScrollIndicator={false}>
 
           <View style={styles.analyticsSection}>
-            <ClinicalCard title="Heart Rate Trend (24h)" theme={themeColors}>
-              <VitalsTrendChart data={[72, 75, 82, 70, 78, 85, 76, 74]} labels={["8a", "10a", "12p", "2p", "4p", "6p", "8p", "10p"]} theme={themeColors} />
-            </ClinicalCard>
-
             <View style={styles.gridRow}>
               <View style={{ flex: 1.2 }}>
-                <ClinicalCard title="Adherence" theme={themeColors}>
-                  <AdherenceScoreChart score={0.88} theme={themeColors} />
+                <ClinicalCard title="Vitals & Status" theme={themeColors}>
+                   <View style={styles.vitalsGrid}>
+                      <View style={styles.vBlock}>
+                         <Text style={styles.vBlockLabel}>HR</Text>
+                         <Text style={[styles.vBlockValue, { color: themeColors.emergency }]}>{patientContext?.latestVital?.heartrate || '--'}</Text>
+                      </View>
+                      <View style={styles.vBlock}>
+                         <Text style={styles.vBlockLabel}>SpO2</Text>
+                         <Text style={[styles.vBlockValue, { color: themeColors.tint }]}>{patientContext?.latestVital?.spo2 || '--'}%</Text>
+                      </View>
+                   </View>
                 </ClinicalCard>
               </View>
               <View style={{ flex: 1, gap: 12 }}>
-                <TouchableOpacity style={[styles.statTile, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={() => router.push('/live-tracking')}>
+                <TouchableOpacity style={[styles.statTile, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={() => router.push({ pathname: '/live-tracking', params: { patientId: selectedPatient.id } })}>
                   <MaterialIcons name="location-on" size={24} color={themeColors.tint} />
                   <Text style={[styles.statTileLabel, { color: themeColors.muted }]}>Live GPS</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.statTile, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={() => alert('Broadcast sent')}>
-                  <MaterialIcons name="campaign" size={24} color={themeColors.emergency} />
-                  <Text style={[styles.statTileLabel, { color: themeColors.muted }]}>SOS Alert</Text>
+                <TouchableOpacity style={[styles.statTile, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={() => Alert.alert('History', 'Detailed alert logs are shown below.')}>
+                  <MaterialIcons name="history" size={24} color={themeColors.emergency} />
+                  <Text style={[styles.statTileLabel, { color: themeColors.muted }]}>History</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            <ClinicalCard title="Fall Frequency" theme={themeColors}>
-              <FallFrequencyChart data={[0, 1, 0, 0, 1, 0, 0]} labels={["M", "T", "W", "T", "F", "S", "S"]} theme={themeColors} />
+            <ClinicalCard title="Heart Rate Trend (24h)" theme={themeColors}>
+              <VitalsTrendChart data={[72, 75, 82, 70, 78, 85, 76, 74]} labels={["8a", "10a", "12p", "2p", "4p", "6p", "8p", "10p"]} theme={themeColors} />
             </ClinicalCard>
 
-            <ClinicalCard title="Activity Intensity" theme={themeColors}>
-              <ActivityIntensityChart data={[1.2, 1.5, 2.1, 1.8, 1.4, 2.3, 2.0]} labels={["M", "T", "W", "T", "F", "S", "S"]} theme={themeColors} />
+            {/* NEW: Emergency History Section */}
+            <ClinicalCard title="🚨 Emergency History" theme={themeColors}>
+               {history.length === 0 ? (
+                 <Text style={{ color: themeColors.muted, fontSize: 13, fontStyle: 'italic', paddingVertical: 10 }}>No past emergency events.</Text>
+               ) : (
+                 history.slice(0, 5).map(h => (
+                   <View key={h.id} style={styles.historyItem}>
+                      <View style={[styles.historyDot, { backgroundColor: h.status === 'resolved' ? '#10B981' : themeColors.emergency }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.historyType, { color: themeColors.text }]}>{h.source === 'foreground' ? 'Fall Detected' : 'Triggered Alert'}</Text>
+                        <Text style={[styles.historyTime, { color: themeColors.muted }]}>{new Date(h.timestamp).toLocaleDateString()} at {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                      </View>
+                      <View style={[styles.statusTag, { backgroundColor: h.status === 'resolved' ? '#10B98120' : '#EF444420' }]}>
+                         <Text style={{ fontSize: 10, fontWeight: '800', color: h.status === 'resolved' ? '#10B981' : '#EF4444' }}>{h.status?.toUpperCase() || 'UNRESOLVED'}</Text>
+                      </View>
+                   </View>
+                 ))
+               )}
             </ClinicalCard>
           </View>
 
-          {/* AI Health Summary - Redesigned */}
+          {/* AI Health Summary */}
           <LinearGradient
             colors={isDark ? ['#1E293B', '#0F172A'] : ['#F0F9FF', '#E0F2FE']}
             style={styles.aiSummaryCard}
@@ -327,35 +385,46 @@ export default function DoctorDashboard() {
             )}
           </LinearGradient>
 
-          {/* Medications */}
+          {/* Medications Management */}
           <ClinicalCard title={t('common.medication')} theme={themeColors}>
              <View style={styles.sectionHeader}>
-               <TouchableOpacity
-                 style={[styles.prescribeBtn, { backgroundColor: themeColors.vital }]}
-                 onPress={() => router.push({ pathname: '/add-medication', params: { mode: 'prescribe', patientId: selectedPatient.id } })}
-               >
-                 <MaterialIcons name="add" size={14} color="#fff" />
-                 <Text style={styles.prescribeBtnText}>{t('common.add_prescription')}</Text>
-               </TouchableOpacity>
+                <Text style={{ fontSize: 12, color: themeColors.muted }}>Active Prescriptions</Text>
+                <TouchableOpacity
+                  style={[styles.prescribeBtn, { backgroundColor: themeColors.vital }]}
+                  onPress={() => router.push({ pathname: '/add-medication', params: { mode: 'prescribe', patientId: selectedPatient.id } })}
+                >
+                  <MaterialIcons name="add" size={14} color="#fff" />
+                  <Text style={styles.prescribeBtnText}>{t('common.add_prescription')}</Text>
+                </TouchableOpacity>
              </View>
              <View style={styles.medicationList}>
                {patientMeds.length === 0 ? (
                  <Text style={[styles.emptyText, { color: themeColors.muted }]}>No active medications.</Text>
                ) : (
                  patientMeds.map((med) => (
-                   <View key={med.id} style={[styles.medItem, { borderBottomColor: themeColors.border }]}>
+                   <TouchableOpacity 
+                    key={med.id} 
+                    style={[styles.medItem, { borderBottomColor: themeColors.border }]}
+                    onPress={() => router.push({ pathname: '/add-medication', params: { medicationId: med.id, mode: 'edit', patientId: selectedPatient.id } })}
+                   >
                      <View style={{ flex: 1 }}>
                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                          <Text style={[styles.medNameSmall, { color: themeColors.text }]}>{med.name}</Text>
-                         <View style={[styles.typeBadge, { backgroundColor: med.isPrescribed ? '#DC262615' : '#E2E8F0' }]}>
-                           <Text style={[styles.typeBadgeText, { color: med.isPrescribed ? '#DC2626' : '#718096' }]}>
-                             {med.isPrescribed ? 'Rx' : 'Self'}
-                           </Text>
-                         </View>
+                         {med.isPrescribed && (
+                           <View style={[styles.typeBadge, { backgroundColor: '#DC262615' }]}>
+                             <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>Rx</Text>
+                           </View>
+                         )}
                        </View>
                        <Text style={[styles.medSub, { color: themeColors.muted }]}>{med.dosage} • {med.times.join(', ')}</Text>
                      </View>
-                   </View>
+                     <TouchableOpacity 
+                        style={[styles.nudgeBtn, { backgroundColor: themeColors.tint + '15' }]}
+                        onPress={() => Alert.alert('Nudge Sent', `A medication reminder has been sent to ${selectedPatient.full_name}.`)}
+                      >
+                        <MaterialIcons name="notifications-active" size={16} color={themeColors.tint} />
+                     </TouchableOpacity>
+                   </TouchableOpacity>
                  ))
                )}
              </View>
@@ -975,9 +1044,62 @@ const styles = StyleSheet.create({
     fontWeight: '900', 
     letterSpacing: 4 
   },
-  copyBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6 
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  // Clinical Detail Specialized Styles
+  vitalsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 10,
+  },
+  vBlock: {
+    alignItems: 'center',
+  },
+  vBlockLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  vBlockValue: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  historyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  historyType: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  historyTime: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  statusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  nudgeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });

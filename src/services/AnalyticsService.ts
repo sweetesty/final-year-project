@@ -11,7 +11,7 @@ export class AnalyticsService {
       const vitals = await VitalsService.getRecentVitals(patientId, 50);
       const falls = await this.getRecentFalls(patientId);
       
-      const avgHR = vitals.reduce((acc, v) => acc + v.heartRate, 0) / (vitals.length || 1);
+      const avgHR = vitals.reduce((acc, v) => acc + v.heartrate, 0) / (vitals.length || 1);
       const activityTrend = vitals.length > 10 ? (vitals[vitals.length-1].steps > vitals[0].steps ? 'increasing' : 'decreasing') : 'stable';
       const fallCount = falls.length;
 
@@ -33,7 +33,7 @@ export class AnalyticsService {
 
   static async getRecentFalls(patientId: string) {
     const { data } = await supabase
-      .from('falls') // Assuming 'falls' table exists based on FallEvent model
+      .from('fall_events') 
       .select('*')
       .eq('patientid', patientId)
       .limit(10);

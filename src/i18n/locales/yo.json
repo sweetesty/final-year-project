@@ -107,8 +107,8 @@
   "doctor": {
     "home_title": "Ìlé Ìṣègùn",
     "panel_title": "Pánẹ́ẹ̀lì Ìṣègùn",
-    "messages_title": "Àpótí Ìṣẹ́",
-    "alerts_title": "Àwọn Ìkìlọ̀ Ìṣègùn",
+    "messages_title": "Saƙonni",
+    "alerts_title": "Faɗakarwa Asibiti",
     "profile_title": "Profáìlì Oníṣègùn",
     "active_patients": "Àwọn Aláìsàn Tó Ń Ṣiṣẹ́",
     "recent_alerts": "Àwọn Ìkìlọ̀ Àìpẹ́",
@@ -143,7 +143,11 @@
     "facility": "Ibùdó",
     "system_settings": "Ètò Ìsọfitiwéà",
     "security": "Ààbò & Ìpamọ́",
-    "version": "Àárín Ìṣẹ́ Ìṣègùn v2.4.0 (Ìpele Oníṣègùn)"
+    "version": "Ìjókòó Àṣẹ Asibiti v2.4.0 (Doctor Mode)",
+    "active_emergencies": "Active Emergencies",
+    "condition": "Condition",
+    "accept_case": "Accept Case",
+    "view_clinical_profile": "View Clinical Profile"
   },
   "pharmacy": {
     "title": "Ilé Oògùn",

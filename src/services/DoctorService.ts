@@ -40,7 +40,7 @@ export class DoctorService {
       .from('doctor_patient_links')
       .insert({
         doctor_id: doctorId,
-        patient_id: patient.id
+        patientid: patient.id
       });
 
     if (linkError) throw new Error("Already linked to this patient.");
@@ -55,8 +55,8 @@ export class DoctorService {
     const { data, error } = await supabase
       .from('doctor_patient_links')
       .select(`
-        patient_id,
-        patient:profiles!doctor_patient_links_patient_id_fkey(id, full_name, avatar_url)
+        patientid,
+        patient:profiles!patientid(id, full_name, avatar_url)
       `)
       .eq('doctor_id', doctorId);
 
@@ -76,9 +76,9 @@ export class DoctorService {
         .from('doctor_patient_links')
         .select(`
           doctor_id,
-          doctor:profiles!doctor_patient_links_doctor_id_fkey(id, full_name, avatar_url, role)
+          doctor:profiles!doctor_id(id, full_name, avatar_url, role)
         `)
-        .eq('patient_id', patientId)
+        .eq('patientid', patientId)
         .maybeSingle();
 
       if (linkError) {
@@ -103,11 +103,113 @@ export class DoctorService {
         if (profile) return profile;
       }
 
-      console.log('[DoctorService] Clinical connection verified:', link.doctor?.full_name || 'Generic Provider');
-      return link.doctor;
+    console.log('[DoctorService] Clinical connection verified:', link.doctor?.full_name || 'Generic Provider');
+    return link.doctor;
     } catch (e) {
       console.error('[DoctorService] Global fetch error:', e);
       return null;
+    }
+  }
+
+  /**
+   * Fetches latest vitals and calculates clinical risk.
+   */
+  static async getPatientClinicalContext(patientId: string) {
+    try {
+      // 1. Get latest vitals
+      const { data: vitals } = await supabase
+        .from('vitals')
+        .select('*')
+        .eq('patientid', patientId)
+        .order('timestamp', { ascending: false })
+        .limit(1);
+
+      const latestVital = vitals?.[0];
+      
+      // 2. Determine Risk Level
+      let riskLevel: 'Low' | 'Medium' | 'High' = 'Low';
+      if (latestVital) {
+        if (latestVital.heartrate > 120 || latestVital.heartrate < 50 || latestVital.spo2 < 90) {
+          riskLevel = 'High';
+        } else if (latestVital.heartrate > 100 || latestVital.spo2 < 94) {
+          riskLevel = 'Medium';
+        }
+      }
+
+      // 3. Last online status (if vital is > 5 mins old, consider offline)
+      const lastOnline = latestVital?.timestamp ? new Date(latestVital.timestamp) : null;
+      const isOnline = lastOnline ? (Date.now() - lastOnline.getTime() < 5 * 60 * 1000) : false;
+
+      return {
+        latestVital,
+        riskLevel,
+        isOnline,
+        lastOnline
+      };
+    } catch (e) {
+      console.error('[DoctorService] Context error:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Fetches active (unresolved) fall alerts for doctor's patients.
+   */
+  static async getUnresolvedAlerts(doctorId: string) {
+    try {
+      // 1. Get linked patient IDs
+      const patients = await this.getLinkedPatients(doctorId);
+      const patientIds = patients.map(p => p.id);
+      
+      if (patientIds.length === 0) return [];
+
+      // 2. Fetch Unresolved Falls
+      const { data: alerts, error } = await supabase
+        .from('fall_events')
+        .select('*, profiles!patientid(id, full_name)')
+        .in('patientid', patientIds)
+        .eq('status', 'unresolved')
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      return alerts;
+    } catch (e) {
+      console.error('[DoctorService] Alert fetch error:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Assigns a doctor to an alert and updates its status.
+   */
+  static async acceptAlert(alertId: string, doctorId: string) {
+    const { error } = await supabase
+      .from('fall_events')
+      .update({ 
+        status: 'in-progress',
+        assigned_doctor_id: doctorId 
+      })
+      .eq('id', alertId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Fetches full alert history for a specific patient.
+   */
+  static async getPatientAlertHistory(patientId: string) {
+    try {
+      const { data: alerts, error } = await supabase
+        .from('fall_events')
+        .select('*')
+        .eq('patientid', patientId)
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      return alerts;
+    } catch (e) {
+      console.error('[DoctorService] History error:', e);
+      return [];
     }
   }
 }

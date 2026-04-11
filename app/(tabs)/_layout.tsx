@@ -103,7 +103,7 @@ export default function TabLayout() {
         name="clinical-profile"
         options={{
           title: t('tabs.profile'),
-          href: isDoctor ? '/clinical-profile' : null,
+          href: '/clinical-profile',
           tabBarIcon: ({ color, size }) => <MaterialIcons name="account-circle" size={size} color={color} />,
         }}
       />

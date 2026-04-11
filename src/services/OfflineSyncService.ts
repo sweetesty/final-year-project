@@ -53,12 +53,16 @@ export class OfflineSyncService {
     payload: Record<string, any>,
     updateFilter?: { column: string; value: string }
   ): Promise<void> {
+    const normalizedPayload = { ...payload };
+    if (normalizedPayload.patientId) { normalizedPayload.patientid = normalizedPayload.patientId; delete normalizedPayload.patientId; }
+    if (normalizedPayload.heartRate) { normalizedPayload.heartrate = normalizedPayload.heartRate; delete normalizedPayload.heartRate; }
+    
     let query;
     if (operation === 'insert') {
-      query = supabase.from(table).insert(payload);
+      query = supabase.from(table).insert(normalizedPayload);
     } else {
       if (!updateFilter) throw new Error('Update requires a filter');
-      query = supabase.from(table).update(payload).eq(updateFilter.column, updateFilter.value);
+      query = supabase.from(table).update(normalizedPayload).eq(updateFilter.column, updateFilter.value);
     }
     const { error } = await query;
     if (error) throw error;

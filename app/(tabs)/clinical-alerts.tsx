@@ -8,6 +8,7 @@ import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { DoctorService } from '@/src/services/DoctorService';
 
 interface AlertEvent {
   id: string;
@@ -35,20 +36,17 @@ export default function ClinicalAlertsScreen() {
     if (!session?.user?.id) return;
     setLoading(true);
     try {
-      // 1. Get linked patients
-      const { data: links } = await supabase
-        .from('doctor_patient_links')
-        .select('patientid, patient:profiles!patientid(full_name)')
-        .eq('doctor_id', session.user.id);
-
-      if (!links || links.length === 0) {
+      // 1. Get linked patients using resilient service
+      const patientsProfiles = await DoctorService.getLinkedPatients(session.user.id);
+      
+      if (!patientsProfiles || patientsProfiles.length === 0) {
         setAlerts([]);
         return;
       }
 
-      const patientIds = links.map(l => l.patientid);
-      const patientMap = links.reduce((acc: any, curr: any) => {
-        acc[curr.patientid] = curr.patient?.full_name || 'Unknown Patient';
+      const patientIds = patientsProfiles.map(p => p.id);
+      const patientMap = patientsProfiles.reduce((acc: any, curr: any) => {
+        acc[curr.id] = curr.full_name || 'Unknown Patient';
         return acc;
       }, {});
 

@@ -24,18 +24,18 @@ export default function ClinicalMessagesScreen() {
   const loadConversations = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
-      // 1. Fetch linked patients
+      // Use the safe DoctorService to get patients and their profiles
       const patients = await DoctorService.getLinkedPatients(session.user.id);
       
-      // 2. Wrap them with a preview (In a real app, we'd fetch the last message here)
-      const convoList = patients.map(p => ({
-        ...p,
-        lastMessage: 'Ready to chat regarding clinical status...',
+      const convs = patients.map(p => ({
+        id: p.id,
+        full_name: p.full_name,
+        lastMessage: 'Clinical channel active',
         lastMessageTime: 'Now',
-        unreadCount: 0
+        unreadCount: 0,
       }));
 
-      setConversations(convoList);
+      setConversations(convs);
     } catch (e) {
       console.error('[ClinicalMessages] Load error:', e);
     } finally {

@@ -11,12 +11,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function ClinicalProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
-  const { session, signOut } = useAuthViewModel();
+  const { session, signOut, role } = useAuthViewModel();
   const { t } = useTranslation();
   const router = useRouter();
+  
+  const isDoctor = role === 'doctor';
 
-  const doctorName = session?.user?.user_metadata?.full_name || 'Medical Officer';
-  const doctorEmail = session?.user?.email || 'doctor@hospital.com';
+  const userName = session?.user?.user_metadata?.full_name || (isDoctor ? 'Medical Officer' : 'Patient');
+  const userEmail = session?.user?.email || (isDoctor ? 'doctor@hospital.com' : 'patient@vitalsfusion.com');
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -50,28 +52,48 @@ export default function ClinicalProfileScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <Stack.Screen options={{ title: 'Clinical Profile', headerShown: true }} />
+      <Stack.Screen options={{ title: isDoctor ? 'Clinical Profile' : 'Personal Profile', headerShown: true }} />
       
       <LinearGradient colors={[themeColors.tint + '20', 'transparent']} style={styles.header}>
         <View style={styles.avatarContainer}>
           <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=200&auto=format&fit=crop' }} 
+            source={{ uri: isDoctor 
+              ? 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=200&auto=format&fit=crop' 
+              : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop' 
+            }} 
             style={styles.avatar} 
           />
-          <View style={[styles.badge, { backgroundColor: themeColors.tint }]}>
-            <MaterialIcons name="verified-user" size={14} color="#fff" />
+          <View style={[styles.badge, { backgroundColor: isDoctor ? themeColors.tint : '#10B981' }]}>
+            <MaterialIcons name={isDoctor ? "verified-user" : "person"} size={14} color="#fff" />
           </View>
         </View>
-        <Text style={[styles.name, { color: themeColors.text }]}>{doctorName}</Text>
-        <Text style={[styles.specialty, { color: themeColors.muted }]}>{t('doctor.specialist')}</Text>
+        <Text style={[styles.name, { color: themeColors.text }]}>{userName}</Text>
+        <Text style={[styles.specialty, { color: themeColors.muted }]}>
+          {isDoctor ? t('doctor.specialist') : 'Verified User'}
+        </Text>
       </LinearGradient>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>{t('doctor.clinical_id')}</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>
+          {isDoctor ? t('doctor.clinical_id') : 'Account Information'}
+        </Text>
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <ProfileItem icon="email" label={t('doctor.hospital_email')} value={doctorEmail} />
-          <ProfileItem icon="badge" label={t('doctor.medical_id')} value="KNS-992-001" />
-          <ProfileItem icon="apartment" label={t('doctor.facility')} value="Vitals Fusion Health Center" />
+          <ProfileItem icon="email" label="Primary Email" value={userEmail} />
+          {isDoctor ? (
+            <>
+              <ProfileItem icon="badge" label={t('doctor.medical_id')} value="KNS-992-001" />
+              <ProfileItem icon="apartment" label={t('doctor.facility')} value="Vitals Fusion Health Center" />
+            </>
+          ) : (
+            <>
+              <TouchableOpacity onPress={() => router.push('/medical-details')}>
+                <ProfileItem icon="medical-services" label="Medical Profile" value="Manage Vitals & History" color="#EC4899" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/emergency-contacts')}>
+                <ProfileItem icon="contacts" label="Emergency Contacts" value="Manage SOS Recipients" color="#6366F1" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
@@ -99,7 +121,9 @@ export default function ClinicalProfileScreen() {
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Text style={[styles.version, { color: themeColors.muted }]}>{t('doctor.version')}</Text>
+        <Text style={[styles.version, { color: themeColors.muted }]}>
+          {isDoctor ? t('doctor.version') : 'Vitals Fusion v1.2.0'}
+        </Text>
       </View>
     </ScrollView>
   );

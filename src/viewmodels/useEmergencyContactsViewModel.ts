@@ -13,10 +13,10 @@ export const useEmergencyContactsViewModel = (patientId: string) => {
       .from('emergency_contacts')
       .select('*')
       .eq('patientid', patientId)          // DB: patientid (lowercase)
-      .order('createdat', { ascending: true });
+      .order('created_at', { ascending: true }); // DB: created_at (underscore)
 
     if (error) console.error('[EmergencyContacts] Fetch error:', error);
-    // Map DB snake_case → camelCase for the UI
+    // Map DB lowercase → camelCase for the UI
     else setContacts((data ?? []).map(mapRow));
     setLoading(false);
   }, [patientId]);
@@ -65,7 +65,7 @@ export const useEmergencyContactsViewModel = (patientId: string) => {
   return { contacts, loading, addContact, deleteContact, setPrimary, refresh: fetchContacts };
 };
 
-// Map DB row (lowercase columns) → EmergencyContact (camelCase)
+// Map DB row → EmergencyContact
 function mapRow(row: any): EmergencyContact {
   return {
     id:           row.id,
@@ -74,6 +74,6 @@ function mapRow(row: any): EmergencyContact {
     phone:        row.phone,
     relationship: row.relationship,
     isPrimary:    row.isprimary,
-    createdAt:    row.createdat,
+    createdAt:    row.created_at, // Use created_at from SQL
   };
 }

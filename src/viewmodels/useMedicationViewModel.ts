@@ -20,14 +20,12 @@ export const useMedicationViewModel = (patientId: string) => {
 
     if (error) console.error(error);
     else {
-      // Map DB lowercase column names to camelCase model fields
+      // Map DB lowercase column names to model fields
       const mapped = (data || []).map((m: any) => ({
         ...m,
         isCritical: m.iscritical,
-        isPrescribed: m.isprescribed,
-        prescribedBy: m.prescribedby,
         patientId: m.patientid,
-        createdAt: m.createdat,
+        createdAt: m.created_at, 
       }));
       setMedications(mapped);
     }
@@ -44,7 +42,7 @@ export const useMedicationViewModel = (patientId: string) => {
       .from('medication_logs')
       .select('*')
       .eq('patientid', patientId)
-      .gte('createdat', startOfDay.toISOString());
+      .gte('takenat', startOfDay.toISOString()); 
 
     if (error) console.error(error);
     else setTodayLogs(data || []);
@@ -62,8 +60,6 @@ export const useMedicationViewModel = (patientId: string) => {
         dosage: newMed.dosage,
         instructions: newMed.instructions,
         iscritical: newMed.isCritical,
-        isprescribed: newMed.isPrescribed,
-        prescribedby: newMed.prescribedBy,
         times: newMed.times,
         frequency: newMed.frequency,
         patientid: patientId 
@@ -90,7 +86,7 @@ export const useMedicationViewModel = (patientId: string) => {
         patientid: patientId,
         status,
         scheduledtime: scheduledTime,
-        createdat: new Date().toISOString(),
+        takenat: new Date().toISOString(),
       });
       await fetchTodayLogs();
     } catch (error: any) {

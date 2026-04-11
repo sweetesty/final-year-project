@@ -106,7 +106,7 @@ export default function HomeScreen() {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [symptomModalVisible, setSymptomModalVisible] = useState(false);
   
-  const patientId   = session?.user?.id ?? '';
+  const patientid   = session?.user?.id ?? '';
   const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
 
   const navigationState = useRootNavigationState();
@@ -119,24 +119,24 @@ export default function HomeScreen() {
     }
   }, [role, isNavReady, router]);
 
-  const { medications, refresh: refreshMeds } = useMedicationViewModel(patientId);
+  const { medications, refresh: refreshMeds } = useMedicationViewModel(patientid);
 
   // Refresh data whenever dashboard becomes focused (after adding a med)
   useFocusEffect(
     useCallback(() => {
-      if (patientId) refreshMeds();
-    }, [patientId, refreshMeds])
+      if (patientid) refreshMeds();
+    }, [patientid, refreshMeds])
   );
   const firstName   = patientName.split(' ')[0];
 
-  const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientId, patientName);
+  const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientid, patientName);
 
   const [patientCode, setPatientCode] = useState('––– –––');
   const [vitals, setVitals] = useState<Vitals>({ heartrate: 72, spo2: 98, steps: 1240, activeMin: 42 });
 
   // Symptom Prompt & Diagnostic Logging
   useEffect(() => {
-    console.log('[Auth] Current User ID:', patientId || 'NOT_LOGGED_IN');
+    console.log('[Auth] Current User ID:', patientid || 'NOT_LOGGED_IN');
     console.log('[Auth] Current Role:', role || 'NO_ROLE');
 
     if (role === 'doctor') return;
@@ -145,7 +145,7 @@ export default function HomeScreen() {
       setSymptomModalVisible(true);
     }, 2000);
     return () => clearTimeout(timer);
-  }, [role, patientId]);
+  }, [role, patientid]);
 
   // History state
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -170,15 +170,15 @@ export default function HomeScreen() {
 
   // Patient code
   useEffect(() => {
-    if (!patientId) return;
-    DoctorService.ensurePatientCode(patientId)
+    if (!patientid) return;
+    DoctorService.ensurePatientCode(patientid)
       .then(c => { if (c) setPatientCode(c.replace(/(\d{3})(\d{3})/, '$1 $2')); })
       .catch(console.error);
 
-    DoctorService.getLinkedDoctor(patientId)
+    DoctorService.getLinkedDoctor(patientid)
       .then(setDoctor)
       .catch(console.error);
-  }, [patientId]);
+  }, [patientid]);
 
   // Physical step counting
   useEffect(() => {
@@ -248,9 +248,9 @@ export default function HomeScreen() {
           refreshPedometer(); // Sync steps for the new day
         }
 
-        if (patientId && patientId !== '') {
+        if (patientid && patientid !== '') {
           VitalsService.logVitals({ 
-            patientid: patientId, 
+            patientid: patientid, 
             heartrate: hr, 
             spo2, 
             steps: nextSteps, 
@@ -264,7 +264,7 @@ export default function HomeScreen() {
       if (hr > 95) SpeechService.speak(`${firstName}, your heart rate is ${hr} BPM. Please rest.`, i18n.language);
     }, 15000);
     return () => clearInterval(id);
-  }, [patientId, firstName, i18n.language]);
+  }, [patientid, firstName, i18n.language]);
 
   const handleLogSymptom = async (type: string) => {
     // Real-world: supabase.from('symptoms').insert(...)
@@ -272,7 +272,7 @@ export default function HomeScreen() {
     setSymptomModalVisible(false);
   };
 
-  const zone = hrZone(vitals.heartRate);
+  const zone = hrZone(vitals.heartrate);
 
   const startAudioBriefing = () => {
     const lng = i18n.language;
@@ -394,13 +394,15 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.codeStripBtn}
               onPress={() => {
-                const targetId = doctor?.id || 'demo-doctor-001';
-                const targetName = doctor?.full_name || 'Dr. Sarah Wilson';
-                router.push({ pathname: '/chat-room', params: { partnerId: targetId, partnerName: targetName } });
+                if (doctor) {
+                  router.push({ pathname: '/chat-room', params: { partnerId: doctor.id, partnerName: doctor.full_name } });
+                } else {
+                  router.push('/(tabs)/doctor');
+                }
               }}
             >
-              <MaterialIcons name="chat" size={16} color="#fff" />
-              <Text style={styles.codeStripBtnText}>{t('common.message')}</Text>
+              <MaterialIcons name={doctor ? "chat" : "person-search"} size={16} color="#fff" />
+              <Text style={styles.codeStripBtnText}>{doctor ? t('common.message') : 'Find Doctor'}</Text>
             </TouchableOpacity>
           </Animated.View>
         </LinearGradient>
@@ -458,7 +460,7 @@ export default function HomeScreen() {
               { icon: 'location-on',    label: t('home.live_map'),     sub: t('home.track_location'),  color: '#6366F1', route: '/live-tracking' },
               { icon: 'medication',     label: t('common.medication'),  sub: t('home.schedule_doses'), color: '#EC4899', route: '/medication' },
               { icon: 'phone-in-talk',  label: t('common.emergency'),   sub: t('home.sos_contacts'),    color: '#EF4444', route: '/emergency-contacts' },
-              { icon: 'local-hospital', label: t('common.doctor'), sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : t('home.direct_contact'), color: '#10B981', route: '/(tabs)/doctor' },
+              { icon: 'local-hospital', label: t('common.doctor'), sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : 'Find a doctor', color: '#10B981', route: '/(tabs)/doctor' },
             ].map((a, i) => (
               <Animated.View key={a.label} entering={FadeInDown.delay(360 + i * 50).duration(380)} style={{ width: (width - Spacing.lg * 2 - 12) / 2 }}>
                 <TouchableOpacity

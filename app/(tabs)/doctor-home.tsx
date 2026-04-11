@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { supabase } from '@/src/services/SupabaseService';
 import { DoctorService } from '@/src/services/DoctorService';
+import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { VitalsTrendChart } from '@/src/components/AnalyticsCharts';
@@ -96,6 +97,15 @@ export default function DoctorHomeScreen() {
       loadDashboardData();
     } catch (e) {
       Alert.alert('Error', 'Could not accept alert.');
+    }
+  };
+
+  const handleClearQueue = async () => {
+    try {
+      await OfflineSyncService.clearQueue();
+      Alert.alert('Success', 'Offline sync queue has been cleared. Zombie errors should stop now.');
+    } catch (e) {
+      Alert.alert('Error', 'Could not clear queue.');
     }
   };
 
@@ -249,10 +259,20 @@ export default function DoctorHomeScreen() {
             <Text style={styles.greeting}>{t('home.good_afternoon')},</Text>
             <Text style={styles.drName}>Dr. {doctorName.split(' ')[0]}</Text>
           </View>
-          <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/clinical-alerts')}>
-            <MaterialIcons name="notifications-none" size={26} color="#fff" />
-            {stats.alerts > 0 && <View style={styles.notifBadge} />}
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity 
+              style={[styles.notifBtn, { backgroundColor: 'rgba(239,68,68,0.3)' }]} 
+              onPress={handleClearQueue}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="cleaning-services" size={24} color="#fff" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/clinical-alerts')}>
+              <MaterialIcons name="notifications-none" size={26} color="#fff" />
+              {stats.alerts > 0 && <View style={styles.notifBadge} />}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsRow}>

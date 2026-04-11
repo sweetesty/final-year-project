@@ -50,8 +50,7 @@ export default function ChatRoomScreen() {
 
   const userId = session?.user?.id;
   const chatId = userId ? ChatService.getChatId(userId, partnerId) : '';
-  const isDemoChat = partnerId === 'demo-doctor-001';
-  const isDoctor = (partnerId || '').startsWith('doc-') || isDemoChat;
+  const isDoctor = (partnerId || '').startsWith('doc-');
 
   // --- Call State ---
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected'>('idle');
@@ -95,21 +94,6 @@ export default function ChatRoomScreen() {
 
   useEffect(() => {
     if (!session) return;
-
-    if (isDemoChat) {
-      setMessages([
-        { 
-          id: '1', 
-          chat_id: 'demo', 
-          sender_id: partnerId, 
-          receiver_id: userId || '', 
-          message_text: t('home.welcome') + "! I'm Dr. Sarah Wilson. How can I help you today?", 
-          timestamp: new Date().toISOString() 
-        }
-      ]);
-      setLoading(false);
-      return;
-    }
 
     if (!chatId) return;
 
@@ -217,7 +201,7 @@ export default function ChatRoomScreen() {
 
     const newMsg: DirectMessage = {
       id: generateUUID(),
-      chat_id: isDemoChat ? 'demo' : chatId,
+      chat_id: chatId,
       sender_id: userId || '',
       receiver_id: partnerId,
       message_text: inputText.trim() || (attachmentType === 'image' ? '📸 Image Sent' : '🎙️ Voice Note'),
@@ -231,22 +215,6 @@ export default function ChatRoomScreen() {
     // INSTANT UI UPDATE (Optimistic)
     setMessages(prev => [...prev, newMsg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    
-    if (isDemoChat) {
-      // Mock auto-reply
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: generateUUID(),
-          chat_id: 'demo',
-          sender_id: partnerId,
-          receiver_id: userId || '',
-          message_text: "Thank you for the update. I've noted this in your clinical record.",
-          timestamp: new Date().toISOString()
-        }]);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      }, 1500);
-      return;
-    }
 
     try {
       await ChatService.sendMessage(newMsg);

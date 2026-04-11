@@ -13,12 +13,6 @@ import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel'
 import { AnalyticsService } from '@/src/services/AnalyticsService';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const DEMO_DOCTOR = {
-  id: 'demo-doctor-001',
-  full_name: 'Dr. Sarah Wilson',
-  specialization: 'Senior Medical Officer',
-};
-
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 const ClinicalCard = ({ children, title, theme }: any) => (
@@ -49,6 +43,7 @@ export default function DoctorDashboard() {
   const { t } = useTranslation();
 
   const [doctor, setDoctor] = useState<any>(null);
+  const [allDoctors, setAllDoctors] = useState<any[]>([]);
   const [linkedPatients, setLinkedPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [healthSummary, setHealthSummary] = useState<string | null>(null);
@@ -77,6 +72,12 @@ export default function DoctorDashboard() {
     try {
       const d = await DoctorService.getLinkedDoctor(session!.user.id);
       setDoctor(d);
+      
+      // If no linked doctor, fetch all available doctors for the directory
+      if (!d) {
+        const doctors = await DoctorService.getAllDoctors();
+        setAllDoctors(doctors);
+      }
       
       // Also fetch my own link code so I can share it
       const code = await DoctorService.ensurePatientCode(session!.user.id);
@@ -161,8 +162,71 @@ export default function DoctorDashboard() {
 
   // ─── Patient View ──────────────────────────────────────────────────────────
   if (role === 'patient') {
-    const currentDoctor = doctor || DEMO_DOCTOR;
-    const isDemo = !doctor;
+    // If no doctor is linked, show the listing/directory
+    if (!doctor) {
+      return (
+        <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+          <Stack.Screen options={{ title: 'Find a Doctor', headerShown: true }} />
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.directoryHeader}>
+              <Text style={[styles.directoryTitle, { color: themeColors.text }]}>Medical Directory</Text>
+              <Text style={[styles.directorySubtitle, { color: themeColors.muted }]}>
+                Select a clinical specialist to discuss your remote monitoring and health tracking.
+              </Text>
+            </View>
+
+            {allDoctors.length === 0 ? (
+              <View style={styles.emptyDirectory}>
+                <MaterialIcons name="person-search" size={64} color={themeColors.muted + '40'} />
+                <Text style={{ color: themeColors.muted, marginTop: 12 }}>No doctors available at the moment.</Text>
+              </View>
+            ) : (
+              <View style={styles.doctorGrid}>
+                {allDoctors.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={[styles.doctorCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+                    onPress={() => router.push({ 
+                      pathname: '/chat-room', 
+                      params: { partnerId: doc.id, partnerName: doc.full_name } 
+                    })}
+                  >
+                    <View style={[styles.doctorAvatar, { backgroundColor: themeColors.tint + '15' }]}>
+                      <Text style={[styles.doctorAvatarText, { color: themeColors.tint }]}>{doc.full_name.charAt(0)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.doctorName, { color: themeColors.text }]}>{doc.full_name}</Text>
+                      <Text style={[styles.doctorSpec, { color: themeColors.muted }]}>{doc.specialization || 'Clinical Specialist'}</Text>
+                    </View>
+                    <MaterialIcons name="chat" size={20} color={themeColors.tint} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Connectivity Card still shown so they can share their code */}
+            <View style={[styles.connectivityCard, { backgroundColor: themeColors.card, borderColor: themeColors.tint + '30', marginTop: 24 }]}>
+               <View style={styles.connectivityHeader}>
+                  <MaterialIcons name="link" size={20} color={themeColors.tint} />
+                  <Text style={[styles.connectivityTitle, { color: themeColors.text }]}>Your Patient Code</Text>
+               </View>
+               <Text style={[styles.connectivitySubtitle, { color: themeColors.muted }]}>
+                  Share this code with your preferred doctor to link your clinical profiles.
+               </Text>
+               <View style={[styles.codeDisplay, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}>
+                  <Text style={[styles.codeText, { color: themeColors.tint }]}>{myCode || '------'}</Text>
+               </View>
+               <TouchableOpacity style={styles.copyBtn} onPress={() => { Alert.alert("Copied", "Your patient code has been copied to clipboard."); }}>
+                  <MaterialIcons name="content-copy" size={14} color={themeColors.muted} />
+                  <Text style={{ fontSize: 12, color: themeColors.muted, fontWeight: '600' }}>Copy My Code</Text>
+               </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
+
+    const currentDoctor = doctor;
 
     return (
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -207,7 +271,7 @@ export default function DoctorDashboard() {
             <View style={styles.buttonGrid}>
               <TouchableOpacity 
                 style={[styles.actionBtn, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
-                onPress={() => Linking.openURL(`tel:${isDemo ? '+123456789' : '+234800000000'}`)}
+                onPress={() => Linking.openURL('tel:+234800000000')}
               >
                 <Text style={{ fontSize: 20 }}>📞</Text>
                 <Text style={[styles.actionBtnText, { color: '#475569' }]}>Voice Call</Text>
@@ -225,9 +289,7 @@ export default function DoctorDashboard() {
             <TouchableOpacity 
               style={[styles.mainChatBtn, { backgroundColor: themeColors.tint }]}
               onPress={() => {
-                const targetId = currentDoctor?.id || 'demo-doctor-001';
-                const targetName = currentDoctor?.full_name || 'Dr. Sarah Wilson';
-                router.push({ pathname: '/chat-room', params: { partnerId: targetId, partnerName: targetName } });
+                router.push({ pathname: '/chat-room', params: { partnerId: currentDoctor.id, partnerName: currentDoctor.full_name } });
               }}
             >
               <Text style={{ fontSize: 18, marginRight: 8 }}>💬</Text>
@@ -1101,5 +1163,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  // Directory Styles
+  directoryHeader: {
+    marginBottom: 24,
+  },
+  directoryTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  directorySubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  emptyDirectory: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  doctorGrid: {
+    gap: 12,
+  },
+  doctorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    ...Shadows.light,
+  },
+  doctorAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doctorAvatarText: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  doctorName: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  doctorSpec: {
+    fontSize: 13,
+    marginTop: 2,
   },
 });

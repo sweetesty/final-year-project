@@ -40,7 +40,7 @@ export class DoctorService {
       .from('doctor_patient_links')
       .insert({
         doctor_id: doctorId,
-        patientid: patient.id
+        patient_id: patient.id
       });
 
     if (linkError) throw new Error("Already linked to this patient.");
@@ -52,16 +52,40 @@ export class DoctorService {
    * Fetches all patients linked to the current doctor.
    */
   static async getLinkedPatients(doctorId: string) {
-    const { data, error } = await supabase
+    // 1. Fetch the raw links
+    const { data: links, error: linkError } = await supabase
       .from('doctor_patient_links')
-      .select(`
-        patientid,
-        patient:profiles!patientid(id, full_name, avatar_url)
-      `)
+      .select('patient_id, doctor_id')
       .eq('doctor_id', doctorId);
 
-    if (error) throw error;
-    return data.map(d => d.patient);
+    if (linkError) {
+      console.error('[DoctorService] Link fetch error:', linkError);
+      return [];
+    }
+    
+    console.log(`[DoctorService] Found ${links?.length || 0} links for doctor:`, doctorId);
+    if (!links || links.length === 0) return [];
+
+    // 2. Extract patient IDs
+    const patientIds = links.map(l => l.patient_id);
+
+    // 3. Fetch the profiles for these patients (Manual Join)
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', patientIds);
+
+    if (profileError) {
+      console.error('[DoctorService] Profile fetch error (RLS Check?):', profileError);
+      return [];
+    }
+
+    console.log(`[DoctorService] Successfully fetched ${profiles?.length || 0} profiles for ${patientIds.length} links.`);
+    if (profiles?.length < patientIds.length) {
+      console.warn('[DoctorService] MISMATCH: Some linked patients were not found in the profiles table. This is almost certainly an RLS policy issue.');
+    }
+
+    return profiles || [];
   }
 
   /**
@@ -74,11 +98,8 @@ export class DoctorService {
       // 1. Get the link record
       const { data: link, error: linkError } = await supabase
         .from('doctor_patient_links')
-        .select(`
-          doctor_id,
-          doctor:profiles!doctor_id(id, full_name, avatar_url, role)
-        `)
-        .eq('patientid', patientId)
+        .select('doctor_id, patient_id')
+        .eq('patient_id', patientId)
         .maybeSingle();
 
       if (linkError) {
@@ -91,22 +112,22 @@ export class DoctorService {
         return null;
       }
 
-      // 2. If we have the link but the join failed (sometimes due to RLS), try fetching profile directly
-      if (link.doctor_id && !link.doctor) {
-        console.log('[DoctorService] Link exists but doctor details missing. Retrying direct profile fetch...');
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, role')
-          .eq('id', link.doctor_id)
-          .single();
-        
-        if (profile) return profile;
+      // 2. Fetch the doctor's profile (Manual Join)
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, role')
+        .eq('id', link.doctor_id)
+        .single();
+      
+      if (profileError) {
+        console.error('[DoctorService] Doctor profile fetch error:', profileError);
+        return null;
       }
 
-    console.log('[DoctorService] Clinical connection verified:', link.doctor?.full_name || 'Generic Provider');
-    return link.doctor;
+      console.log('[DoctorService] Clinical connection verified:', profile?.full_name);
+      return profile;
     } catch (e) {
-      console.error('[DoctorService] Global fetch error:', e);
+      console.error('[DoctorService] Global fetch error for linked doctor:', e);
       return null;
     }
   }
@@ -119,7 +140,7 @@ export class DoctorService {
       // 1. Get latest vitals
       const { data: vitals } = await supabase
         .from('vitals')
-        .select('*')
+        .select('heartrate, spo2, steps, timestamp, patientid')
         .eq('patientid', patientId)
         .order('timestamp', { ascending: false })
         .limit(1);
@@ -159,20 +180,35 @@ export class DoctorService {
     try {
       // 1. Get linked patient IDs
       const patients = await this.getLinkedPatients(doctorId);
-      const patientIds = patients.map(p => p.id);
+      const patientids = patients.map(p => p.id);
       
-      if (patientIds.length === 0) return [];
+      if (patientids.length === 0) return [];
 
       // 2. Fetch Unresolved Falls
       const { data: alerts, error } = await supabase
         .from('fall_events')
-        .select('*, profiles!patientid(id, full_name)')
-        .in('patientid', patientIds)
+        .select('*')
+        .in('patientid', patientids)
         .eq('status', 'unresolved')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
-      return alerts;
+
+      // 3. Enhance with profiles manually to avoid join failures
+      const enhancedAlerts = await Promise.all(alerts.map(async (alert) => {
+        const patient = patients.find(p => p && p.id === alert.patientid);
+        if (patient) return { ...alert, profiles: patient };
+        
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('id', alert.patientid)
+          .single();
+        
+        return { ...alert, profiles: profile };
+      }));
+
+      return enhancedAlerts;
     } catch (e) {
       console.error('[DoctorService] Alert fetch error:', e);
       return [];
@@ -197,18 +233,44 @@ export class DoctorService {
   /**
    * Fetches full alert history for a specific patient.
    */
-  static async getPatientAlertHistory(patientId: string) {
+  static async getPatientAlertHistory(patientid: string) {
     try {
       const { data: alerts, error } = await supabase
         .from('fall_events')
         .select('*')
-        .eq('patientid', patientId)
+        .eq('patientid', patientid)
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
       return alerts;
     } catch (e) {
       console.error('[DoctorService] History error:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetches all registered doctors in the system.
+   */
+  static async getAllDoctors() {
+    console.log('[DoctorService] Fetching all registered doctors...');
+    try {
+      // Fetching without a case-sensitive filter first to see what's there,
+      // or using .ilike if your Supabase supports it, but .eq is standard.
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, role')
+        .or('role.eq.doctor,role.eq.Doctor'); 
+
+      if (error) {
+        console.error('[DoctorService] Error query for all doctors:', error);
+        throw error;
+      }
+      
+      console.log(`[DoctorService] Found ${data?.length || 0} potential doctor profiles.`);
+      return data || [];
+    } catch (e) {
+      console.error('[DoctorService] Fatal error fetching all doctors:', e);
       return [];
     }
   }

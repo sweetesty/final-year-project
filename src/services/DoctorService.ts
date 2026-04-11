@@ -68,16 +68,46 @@ export class DoctorService {
    * Fetches the assigned doctor for a patient.
    */
   static async getLinkedDoctor(patientId: string) {
-    const { data, error } = await supabase
-      .from('doctor_patient_links')
-      .select(`
-        doctor_id,
-        doctor:profiles!doctor_patient_links_doctor_id_fkey(id, full_name, avatar_url, role)
-      `)
-      .eq('patient_id', patientId)
-      .maybeSingle();
+    console.log('[DoctorService] Checking clinical link for patient:', patientId);
+    
+    try {
+      // 1. Get the link record
+      const { data: link, error: linkError } = await supabase
+        .from('doctor_patient_links')
+        .select(`
+          doctor_id,
+          doctor:profiles!doctor_patient_links_doctor_id_fkey(id, full_name, avatar_url, role)
+        `)
+        .eq('patient_id', patientId)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data?.doctor;
+      if (linkError) {
+        console.error('[DoctorService] Link fetch error:', linkError);
+        return null;
+      }
+
+      if (!link) {
+        console.log('[DoctorService] No clinical link record found for this patient.');
+        return null;
+      }
+
+      // 2. If we have the link but the join failed (sometimes due to RLS), try fetching profile directly
+      if (link.doctor_id && !link.doctor) {
+        console.log('[DoctorService] Link exists but doctor details missing. Retrying direct profile fetch...');
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, role')
+          .eq('id', link.doctor_id)
+          .single();
+        
+        if (profile) return profile;
+      }
+
+      console.log('[DoctorService] Clinical connection verified:', link.doctor?.full_name || 'Generic Provider');
+      return link.doctor;
+    } catch (e) {
+      console.error('[DoctorService] Global fetch error:', e);
+      return null;
+    }
   }
 }

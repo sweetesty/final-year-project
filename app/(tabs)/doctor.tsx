@@ -11,7 +11,6 @@ import { ConsultationService } from '@/src/services/ConsultationService';
 import { useTranslation } from 'react-i18next';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { AnalyticsService } from '@/src/services/AnalyticsService';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const DEMO_DOCTOR = {
@@ -41,6 +40,7 @@ const StatusIndicator = ({ theme }: any) => {
 };
 
 export default function DoctorDashboard() {
+  console.log('[DoctorDashboard] Component Mounting...');
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
@@ -243,7 +243,12 @@ export default function DoctorDashboard() {
         <Stack.Screen options={{ headerShown: false }} />
         
         {/* Custom Premium Header */}
-        <BlurView intensity={Platform.OS === 'ios' ? 80 : 100} tint={isDark ? 'dark' : 'light'} style={styles.premiumHeader}>
+        <View 
+          style={[
+            styles.premiumHeader, 
+            { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)' }
+          ]}
+        >
           <TouchableOpacity
             style={[styles.miniBackBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
             onPress={() => setSelectedPatient(null)}
@@ -262,7 +267,7 @@ export default function DoctorDashboard() {
                 <MaterialIcons name="chat-bubble" size={18} color="#fff" />
              </TouchableOpacity>
           </View>
-        </BlurView>
+        </View>
 
         <ScrollView contentContainerStyle={styles.scrollWithHeader} showsVerticalScrollIndicator={false}>
 

@@ -50,7 +50,6 @@ export default function TabLayout() {
         name="doctor"
         options={{
           title: t('tabs.clinical_panel'),
-          href: isDoctor ? '/doctor' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
         }}
       />

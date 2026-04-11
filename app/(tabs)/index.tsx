@@ -134,15 +134,18 @@ export default function HomeScreen() {
   const [patientCode, setPatientCode] = useState('––– –––');
   const [vitals, setVitals] = useState<Vitals>({ heartRate: 72, spo2: 98, steps: 1240, activeMin: 42 });
 
-  // Daily Symptom Check-in Logic
+  // Symptom Prompt & Diagnostic Logging
   useEffect(() => {
+    console.log('[Auth] Current User ID:', patientId || 'NOT_LOGGED_IN');
+    console.log('[Auth] Current Role:', role || 'NO_ROLE');
+
     if (role === 'doctor') return;
     // For this demo, we show it 2 seconds after mount to simulate a proactive prompt
     const timer = setTimeout(() => {
       setSymptomModalVisible(true);
     }, 2000);
     return () => clearTimeout(timer);
-  }, [role]);
+  }, [role, patientId]);
 
   // History state
   const [historyVisible, setHistoryVisible] = useState(false);

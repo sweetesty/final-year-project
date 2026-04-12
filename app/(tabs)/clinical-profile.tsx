@@ -10,8 +10,6 @@ import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const AVATAR_KEY = 'user_avatar_uri';
-
 export default function ClinicalProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
@@ -23,14 +21,19 @@ export default function ClinicalProfileScreen() {
   const userName = session?.user?.user_metadata?.full_name || (isDoctor ? 'Medical Officer' : 'Patient');
   const userEmail = session?.user?.email || (isDoctor ? 'doctor@hospital.com' : 'patient@vitalsfusion.com');
 
+  const userId = session?.user?.id;
+  const avatarKey = userId ? `user_avatar_uri_${userId}` : null;
+
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
-  // Load saved avatar on mount
+  // Load saved avatar for this specific user on mount
   React.useEffect(() => {
-    AsyncStorage.getItem(AVATAR_KEY).then(uri => { if (uri) setAvatarUri(uri); });
-  }, []);
+    if (!avatarKey) return;
+    AsyncStorage.getItem(avatarKey).then(uri => { if (uri) setAvatarUri(uri); });
+  }, [avatarKey]);
 
   const handlePickImage = async () => {
+    if (!avatarKey) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please allow access to your photo library to change your profile picture.');
@@ -45,7 +48,7 @@ export default function ClinicalProfileScreen() {
     if (!result.canceled && result.assets[0]) {
       const uri = result.assets[0].uri;
       setAvatarUri(uri);
-      await AsyncStorage.setItem(AVATAR_KEY, uri);
+      await AsyncStorage.setItem(avatarKey, uri);
     }
   };
 

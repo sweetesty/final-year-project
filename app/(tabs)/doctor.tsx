@@ -384,17 +384,13 @@ export default function DoctorDashboard() {
   const loadDoctor = async () => {
     setLoading(true);
     try {
-      const d = await DoctorService.getLinkedDoctor(session!.user.id);
+      const [d, doctors, code] = await Promise.all([
+        DoctorService.getLinkedDoctor(session!.user.id),
+        DoctorService.getAllDoctors(),
+        DoctorService.ensurePatientCode(session!.user.id),
+      ]);
       setDoctor(d);
-      
-      // If no linked doctor, fetch all available doctors for the directory
-      if (!d) {
-        const doctors = await DoctorService.getAllDoctors();
-        setAllDoctors(doctors);
-      }
-      
-      // Also fetch my own link code so I can share it
-      const code = await DoctorService.ensurePatientCode(session!.user.id);
+      setAllDoctors(doctors); // always populate — map needs doctors regardless of link status
       setMyCode(code);
     } catch (e) {
       console.error(e);

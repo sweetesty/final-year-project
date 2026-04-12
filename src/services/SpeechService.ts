@@ -1,6 +1,6 @@
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import * as FileSystem from 'expo-file-system';
+import { documentDirectory, getInfoAsync, makeDirectoryAsync, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { encode } from 'base64-arraybuffer';
 
 // ElevenLabs voice IDs — "Rachel" is calm, warm, natural (great for health apps)
@@ -41,16 +41,16 @@ async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
 
   try {
     const cacheKey = _getCacheKey(text, lng);
-    const cacheUri = FileSystem.documentDirectory + 'audio_cache/' + cacheKey;
+    const cacheUri = documentDirectory + 'audio_cache/' + cacheKey;
 
     // 1. Ensure cache directory exists
-    const dirInfo = await FileSystem.getInfoAsync(FileSystem.documentDirectory + 'audio_cache/');
+    const dirInfo = await getInfoAsync(documentDirectory + 'audio_cache/');
     if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'audio_cache/', { intermediates: true });
+      await makeDirectoryAsync(documentDirectory + 'audio_cache/', { intermediates: true });
     }
 
     // 2. Check if we already have this audio saved (Credit Saver!)
-    const cacheInfo = await FileSystem.getInfoAsync(cacheUri);
+    const cacheInfo = await getInfoAsync(cacheUri);
     let playUri = cacheUri;
 
     if (cacheInfo.exists) {
@@ -89,8 +89,8 @@ async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
 
       const arrayBuffer = await response.arrayBuffer();
       const base64 = encode(arrayBuffer);
-      await FileSystem.writeAsStringAsync(cacheUri, base64, {
-        encoding: 'base64' as any,
+      await writeAsStringAsync(cacheUri, base64, {
+        encoding: EncodingType.Base64,
       });
     }
 

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { OpenAiService } from '../services/OpenAiService';
 import { SpeechService } from '../services/SpeechService';
 import { VoiceService } from '../services/VoiceService';
@@ -91,13 +92,21 @@ export const useAiAssistantViewModel = () => {
   const startVoiceChat = async () => {
     setIsListening(true);
     try {
-      // Use VoiceService to capture speech
       const text = await VoiceService.captureSpeechOnce();
       if (text) {
         await sendMessage(text, true);
       }
-    } catch (error) {
-      console.error("Voice Chat Error:", error);
+    } catch (error: any) {
+      const msg = typeof error === 'string' ? error : error?.message ?? '';
+      if (msg.toLowerCase().includes('expo go') || msg.toLowerCase().includes('not available')) {
+        Alert.alert(
+          'Voice Input Unavailable',
+          'Voice input requires a development build. You can still type your message below.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.error('Voice Chat Error:', error);
+      }
     } finally {
       setIsListening(false);
     }

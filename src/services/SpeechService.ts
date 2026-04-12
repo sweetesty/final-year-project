@@ -98,36 +98,12 @@ async function _speakGroq(text: string): Promise<boolean> {
 }
 
 function _fallbackSpeak(text: string, lng?: string) {
-  const clean = lng?.toLowerCase() ?? 'en';
-
   let languageCode = 'en-US';
-  let rate = 0.88;
-  let pitch = 1.0;
-
-  if (clean.startsWith('yo')) {
-    languageCode = 'yo-NG';
-    rate = 0.80; // speak slower for tonal language clarity
-    pitch = 1.05;
-  } else if (clean.startsWith('ig')) {
-    languageCode = 'ig-NG';
-    rate = 0.80;
-    pitch = 1.0;
-  } else if (clean.startsWith('ha')) {
-    languageCode = 'ha-NG';
-    rate = 0.82;
-    pitch = 0.98;
-  }
-
-  console.log(`[SpeechService] Native TTS → ${languageCode}`);
-  Speech.speak(text, { language: languageCode, rate, pitch, volume: 1.0 });
-}
-
-const GROQ_SUPPORTED_LANGS = ['en'];
-
-function _isGroqSupported(lng?: string): boolean {
-  if (!lng) return true; // default English
-  const l = lng.toLowerCase();
-  return GROQ_SUPPORTED_LANGS.some(code => l.startsWith(code));
+  const clean = lng?.toLowerCase() ?? 'en';
+  if (clean.startsWith('yo')) languageCode = 'yo-NG';
+  else if (clean.startsWith('ig')) languageCode = 'ig-NG';
+  else if (clean.startsWith('ha')) languageCode = 'ha-NG';
+  Speech.speak(text, { language: languageCode, rate: 0.88, pitch: 1.05, volume: 1.0 });
 }
 
 export class SpeechService {
@@ -136,12 +112,6 @@ export class SpeechService {
     try {
       await _stopCurrent();
       Speech.stop();
-
-      // For non-English languages skip Groq entirely — it's English-only
-      if (!_isGroqSupported(lng)) {
-        _fallbackSpeak(text, lng);
-        return;
-      }
 
       const success = await _speakGroq(text);
       if (!success) {

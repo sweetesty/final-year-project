@@ -84,8 +84,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="ai-chat"
         options={{
-          href: null, // Hidden from tab bar — accessed via FAB on home screen
-          tabBarIcon: ({ color, size }) => <MaterialIcons name="smart-toy" size={size} color={color} />,
+          title: t('tabs.ai_chat'),
+          tabBarButton: () => null, // Hidden from tab bar — accessed via FAB
+          tabBarStyle: { display: 'none' },
         }}
       />
 

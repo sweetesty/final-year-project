@@ -472,7 +472,6 @@ export default function HomeScreen() {
               { icon: 'medication',     label: t('common.medication'),   sub: t('home.schedule_doses'),  color: '#EC4899', route: '/medication' },
               { icon: 'phone-in-talk',  label: t('common.emergency'),    sub: t('home.sos_contacts'),    color: '#EF4444', route: '/emergency-contacts' },
               { icon: 'local-hospital', label: t('common.doctor'),       sub: doctor ? 'Dr. ' + doctor.full_name.split(' ').pop() : 'Find a doctor', color: '#10B981', route: '/(tabs)/doctor' },
-              { icon: 'person-search',  label: 'Nearby Doctors',         sub: 'Map & help signal',       color: '#F59E0B', route: '/nearby-doctors' },
             ].map((a, i) => (
               <Animated.View key={a.label} entering={FadeInDown.delay(360 + i * 50).duration(380)} style={{ width: (width - Spacing.lg * 2 - 12) / 2 }}>
                 <TouchableOpacity

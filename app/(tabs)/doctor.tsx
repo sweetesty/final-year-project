@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, Platform, Dimensions } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
@@ -12,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { AnalyticsService } from '@/src/services/AnalyticsService';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -32,6 +35,299 @@ const StatusIndicator = ({ theme }: any) => {
     </View>
   );
 };
+
+// ─── Specialty filter chips ───────────────────────────────────────────────────
+const SPECIALTIES = [
+  'All',
+  'Nearby',
+  'General Practitioner',
+  'Cardiologist',
+  'Geriatrician',
+  'Neurologist',
+  'Pulmonologist',
+  'Endocrinologist',
+  'Psychiatrist',
+  'Orthopedic',
+];
+
+// ─── Patient-facing Find Doctor screen ───────────────────────────────────────
+function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, themeColors, isDark, t }: any) {
+  const mapRef = useRef<MapView>(null);
+  const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [nearbyDoctors, setNearbyDoctors] = useState<any[]>([]);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMarker, setSelectedMarker] = useState<any | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+
+  // Derive specialties that actually exist in data
+  const availableSpecialties = useMemo(() => {
+    const specs = new Set(allDoctors.map((d: any) => d.specialization).filter(Boolean));
+    return ['All', 'Nearby', ...Array.from(specs)] as string[];
+  }, [allDoctors]);
+
+  const filterChips = availableSpecialties.length > 3 ? availableSpecialties : SPECIALTIES;
+
+  useEffect(() => {
+    fetchLocation();
+  }, []);
+
+  const fetchLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setMyLocation(coords);
+        const nearby = await DoctorService.getNearbyDoctors(coords.latitude, coords.longitude, 25);
+        setNearbyDoctors(nearby);
+        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 800);
+      }
+    } catch (e) {
+      console.error('[PatientDoctorView] location error:', e);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const filteredDoctors = useMemo(() => {
+    let list = activeFilter === 'Nearby'
+      ? nearbyDoctors
+      : activeFilter === 'All'
+        ? allDoctors
+        : allDoctors.filter((d: any) =>
+            d.specialization?.toLowerCase().includes(activeFilter.toLowerCase())
+          );
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((d: any) =>
+        d.full_name?.toLowerCase().includes(q) ||
+        d.specialization?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [allDoctors, nearbyDoctors, activeFilter, searchQuery]);
+
+  const isOnline = (lastSeen: string | null) => {
+    if (!lastSeen) return false;
+    return Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000;
+  };
+
+  const formatDist = (km?: number) =>
+    km == null ? '' : km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+
+  const focusDoctor = (doc: any) => {
+    setSelectedMarker(doc);
+    if (doc.latitude && doc.longitude) {
+      mapRef.current?.animateToRegion({
+        latitude: doc.latitude,
+        longitude: doc.longitude,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      }, 500);
+    }
+  };
+
+  const mapDoctors = filteredDoctors.filter((d: any) => d.latitude && d.longitude);
+
+  return (
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* ── Map (top half) ── */}
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          provider={PROVIDER_DEFAULT}
+          showsUserLocation
+          showsMyLocationButton={false}
+          initialRegion={
+            myLocation
+              ? { ...myLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
+              : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
+          }
+        >
+          {mapDoctors.map((doc: any) => (
+            <Marker
+              key={doc.id}
+              coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
+              onPress={() => focusDoctor(doc)}
+            >
+              <View style={[
+                styles.mapMarker,
+                selectedMarker?.id === doc.id && styles.mapMarkerSelected,
+                { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' },
+              ]}>
+                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.mapMarkerInner}>
+                  <MaterialIcons name="medical-services" size={14} color="#fff" />
+                </LinearGradient>
+                {isOnline(doc.last_seen) && <View style={styles.markerOnlineDot} />}
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+
+        {/* Map header overlay */}
+        <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={styles.mapHeaderOverlay}>
+          <Text style={styles.mapTitle}>Find a Doctor</Text>
+          <Text style={styles.mapSubtitle}>
+            {locationLoading ? 'Getting your location…' : `${mapDoctors.length} doctors on map`}
+          </Text>
+        </LinearGradient>
+
+        {/* Recenter */}
+        <TouchableOpacity style={styles.recenterBtn} onPress={fetchLocation}>
+          {locationLoading
+            ? <ActivityIndicator size="small" color="#6366F1" />
+            : <MaterialIcons name="my-location" size={20} color="#6366F1" />
+          }
+        </TouchableOpacity>
+
+        {/* Selected marker callout */}
+        {selectedMarker && (
+          <Animated.View entering={FadeInDown.duration(250)} style={styles.mapCallout}>
+            <LinearGradient colors={['#1E1B4B', '#312E81']} style={styles.mapCalloutInner}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.calloutName} numberOfLines={1}>{selectedMarker.full_name}</Text>
+                <Text style={styles.calloutSpec} numberOfLines={1}>
+                  {selectedMarker.specialization || 'Clinical Specialist'}
+                  {selectedMarker.distanceKm != null ? `  •  ${formatDist(selectedMarker.distanceKm)} away` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.calloutChatBtn}
+                onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedMarker.id, partnerName: selectedMarker.full_name } })}
+              >
+                <MaterialIcons name="chat" size={16} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.calloutClose} onPress={() => setSelectedMarker(null)}>
+                <MaterialIcons name="close" size={16} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        )}
+      </View>
+
+      {/* ── Bottom sheet ── */}
+      <View style={[styles.bottomSheet, { backgroundColor: themeColors.background }]}>
+        {/* Search bar */}
+        <View style={[styles.searchBar, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <MaterialIcons name="search" size={20} color={themeColors.muted} />
+          <TextInput
+            style={[styles.searchInput, { color: themeColors.text }]}
+            placeholder="Search by name or specialty…"
+            placeholderTextColor={themeColors.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="close" size={18} color={themeColors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {filterChips.map(chip => {
+            const active = activeFilter === chip;
+            return (
+              <TouchableOpacity
+                key={chip}
+                style={[
+                  styles.filterChip,
+                  { borderColor: active ? themeColors.tint : themeColors.border, backgroundColor: active ? themeColors.tint : themeColors.card },
+                ]}
+                onPress={() => setActiveFilter(chip)}
+              >
+                {chip === 'Nearby' && (
+                  <MaterialIcons name="near-me" size={13} color={active ? '#fff' : themeColors.muted} />
+                )}
+                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.muted }]}>{chip}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Results count */}
+        <Text style={[styles.resultsLabel, { color: themeColors.muted }]}>
+          {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} found
+          {activeFilter !== 'All' ? ` · ${activeFilter}` : ''}
+        </Text>
+
+        {/* Doctor list */}
+        <FlatList
+          data={filteredDoctors}
+          keyExtractor={(d: any) => d.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: Spacing.md }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <MaterialIcons name="person-search" size={48} color={themeColors.muted + '50'} />
+              <Text style={[styles.emptyText, { color: themeColors.muted }]}>
+                {activeFilter === 'Nearby' ? 'No doctors found within 25km' : 'No doctors match your search'}
+              </Text>
+            </View>
+          }
+          renderItem={({ item: doc, index }: any) => (
+            <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
+              <TouchableOpacity
+                style={[styles.docCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+                onPress={() => focusDoctor(doc)}
+                activeOpacity={0.85}
+              >
+                {/* Avatar */}
+                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.docAvatar}>
+                  <Text style={styles.docAvatarText}>{doc.full_name.charAt(0)}</Text>
+                </LinearGradient>
+
+                {/* Info */}
+                <View style={{ flex: 1 }}>
+                  <View style={styles.docNameRow}>
+                    <Text style={[styles.docName, { color: themeColors.text }]} numberOfLines={1}>{doc.full_name}</Text>
+                    {isOnline(doc.last_seen) && (
+                      <View style={styles.onlinePill}>
+                        <View style={styles.onlinePillDot} />
+                        <Text style={styles.onlinePillText}>Online</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.docSpec, { color: themeColors.muted }]} numberOfLines={1}>
+                    {doc.specialization || 'Clinical Specialist'}
+                    {doc.distanceKm != null ? `  ·  ${formatDist(doc.distanceKm)} away` : ''}
+                  </Text>
+                </View>
+
+                {/* Actions */}
+                <TouchableOpacity
+                  style={[styles.docChatBtn, { backgroundColor: themeColors.tint }]}
+                  onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: doc.id, partnerName: doc.full_name } })}
+                >
+                  <MaterialIcons name="chat" size={16} color="#fff" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        />
+      </View>
+
+      {/* Patient link-code card pinned at bottom */}
+      {myCode ? (
+        <View style={[styles.codeBar, { backgroundColor: themeColors.card, borderTopColor: themeColors.border }]}>
+          <MaterialIcons name="link" size={16} color={themeColors.tint} />
+          <Text style={[styles.codeBarLabel, { color: themeColors.muted }]}>Your code:</Text>
+          <Text style={[styles.codeBarValue, { color: themeColors.tint }]}>{myCode}</Text>
+          <TouchableOpacity onPress={() => Alert.alert('Patient Code', `Your code is: ${myCode}\n\nShare it with your doctor to link your profile.`)}>
+            <MaterialIcons name="info-outline" size={18} color={themeColors.muted} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export default function DoctorDashboard() {
   console.log('[DoctorDashboard] Component Mounting...');
@@ -162,160 +458,17 @@ export default function DoctorDashboard() {
 
   // ─── Patient View ──────────────────────────────────────────────────────────
   if (role === 'patient') {
-    // If no doctor is linked, show the listing/directory
-    if (!doctor) {
-      return (
-        <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-          <Stack.Screen options={{ title: 'Find a Doctor', headerShown: true }} />
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.directoryHeader}>
-              <Text style={[styles.directoryTitle, { color: themeColors.text }]}>Medical Directory</Text>
-              <Text style={[styles.directorySubtitle, { color: themeColors.muted }]}>
-                Select a clinical specialist to discuss your remote monitoring and health tracking.
-              </Text>
-            </View>
-
-            {allDoctors.length === 0 ? (
-              <View style={styles.emptyDirectory}>
-                <MaterialIcons name="person-search" size={64} color={themeColors.muted + '40'} />
-                <Text style={{ color: themeColors.muted, marginTop: 12 }}>No doctors available at the moment.</Text>
-              </View>
-            ) : (
-              <View style={styles.doctorGrid}>
-                {allDoctors.map((doc) => (
-                  <TouchableOpacity
-                    key={doc.id}
-                    style={[styles.doctorCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
-                    onPress={() => router.push({ 
-                      pathname: '/chat-room', 
-                      params: { partnerId: doc.id, partnerName: doc.full_name } 
-                    })}
-                  >
-                    <View style={[styles.doctorAvatar, { backgroundColor: themeColors.tint + '15' }]}>
-                      <Text style={[styles.doctorAvatarText, { color: themeColors.tint }]}>{doc.full_name.charAt(0)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.doctorName, { color: themeColors.text }]}>{doc.full_name}</Text>
-                      <Text style={[styles.doctorSpec, { color: themeColors.muted }]}>{doc.specialization || 'Clinical Specialist'}</Text>
-                    </View>
-                    <MaterialIcons name="chat" size={20} color={themeColors.tint} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Connectivity Card still shown so they can share their code */}
-            <View style={[styles.connectivityCard, { backgroundColor: themeColors.card, borderColor: themeColors.tint + '30', marginTop: 24 }]}>
-               <View style={styles.connectivityHeader}>
-                  <MaterialIcons name="link" size={20} color={themeColors.tint} />
-                  <Text style={[styles.connectivityTitle, { color: themeColors.text }]}>Your Patient Code</Text>
-               </View>
-               <Text style={[styles.connectivitySubtitle, { color: themeColors.muted }]}>
-                  Share this code with your preferred doctor to link your clinical profiles.
-               </Text>
-               <View style={[styles.codeDisplay, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}>
-                  <Text style={[styles.codeText, { color: themeColors.tint }]}>{myCode || '------'}</Text>
-               </View>
-               <TouchableOpacity style={styles.copyBtn} onPress={() => { Alert.alert("Copied", "Your patient code has been copied to clipboard."); }}>
-                  <MaterialIcons name="content-copy" size={14} color={themeColors.muted} />
-                  <Text style={{ fontSize: 12, color: themeColors.muted, fontWeight: '600' }}>Copy My Code</Text>
-               </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
-      );
-    }
-
-    const currentDoctor = doctor;
-
     return (
-      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <Stack.Screen options={{ 
-          title: 'Doctor Profile', 
-          headerShown: true 
-        }} />
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-
-          <View style={[styles.profileCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
-            <View style={styles.avatarLarge}>
-              <Text style={styles.avatarText}>{currentDoctor.full_name.charAt(0)}</Text>
-            </View>
-            <Text style={[styles.doctorNameLarge, { color: themeColors.text }]}>{currentDoctor.full_name}</Text>
-            <Text style={[styles.doctorTitle, { color: themeColors.tint }]}>{currentDoctor.specialization || 'Clinical Specialist'}</Text>
-            
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: themeColors.text }]}>120+</Text>
-                <Text style={[styles.statLabel, { color: themeColors.muted }]}>Patients</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: themeColors.text }]}>15y</Text>
-                <Text style={[styles.statLabel, { color: themeColors.muted }]}>Exp.</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: themeColors.text }]}>4.9/5</Text>
-                <Text style={[styles.statLabel, { color: themeColors.muted }]}>Rating</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Text style={[styles.infoTitle, { color: themeColors.text }]}>Specialization</Text>
-            <Text style={[styles.infoText, { color: themeColors.muted }]}>General Medicine, Geriatrics, and Chronic Condition Management.</Text>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Text style={[styles.infoTitle, { color: themeColors.text }]}>Direct Actions</Text>
-            <View style={styles.buttonGrid}>
-              <TouchableOpacity 
-                style={[styles.actionBtn, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
-                onPress={() => Linking.openURL('tel:+234800000000')}
-              >
-                <Text style={{ fontSize: 20 }}>📞</Text>
-                <Text style={[styles.actionBtnText, { color: '#475569' }]}>Voice Call</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.actionBtn, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
-                onPress={() => Alert.alert("Video", "Connecting to secure consultation server...")}
-              >
-                <Text style={{ fontSize: 20 }}>📹</Text>
-                <Text style={[styles.actionBtnText, { color: '#0369A1' }]}>Video Call</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity 
-              style={[styles.mainChatBtn, { backgroundColor: themeColors.tint }]}
-              onPress={() => {
-                router.push({ pathname: '/chat-room', params: { partnerId: currentDoctor.id, partnerName: currentDoctor.full_name } });
-              }}
-            >
-              <Text style={{ fontSize: 18, marginRight: 8 }}>💬</Text>
-              <Text style={styles.mainChatBtnText}>Message Doctor</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* NEW: Connectivity Card for Patients */}
-          <View style={[styles.connectivityCard, { backgroundColor: themeColors.card, borderColor: themeColors.tint + '30' }]}>
-             <View style={styles.connectivityHeader}>
-                <MaterialIcons name="link" size={20} color={themeColors.tint} />
-                <Text style={[styles.connectivityTitle, { color: themeColors.text }]}>Clinical Connection</Text>
-             </View>
-             <Text style={[styles.connectivitySubtitle, { color: themeColors.muted }]}>
-                Share this code with Dr. Shola to link your medical profiles for remote monitoring.
-             </Text>
-             <View style={[styles.codeDisplay, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}>
-                <Text style={[styles.codeText, { color: themeColors.tint }]}>{myCode || '------'}</Text>
-             </View>
-             <TouchableOpacity style={styles.copyBtn} onPress={() => { Alert.alert("Copied", "Your patient code has been copied to clipboard."); }}>
-                <MaterialIcons name="content-copy" size={14} color={themeColors.muted} />
-                <Text style={{ fontSize: 12, color: themeColors.muted, fontWeight: '600' }}>Copy My Code</Text>
-             </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
+      <PatientDoctorView
+        allDoctors={allDoctors}
+        linkedDoctor={doctor}
+        myCode={myCode}
+        session={session}
+        router={router}
+        themeColors={themeColors}
+        isDark={isDark}
+        t={t}
+      />
     );
   }
 
@@ -1439,52 +1592,253 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
-  // Directory Styles
-  directoryHeader: {
-    marginBottom: 24,
+  // ── PatientDoctorView styles ──────────────────────────────────────────────
+  mapContainer: {
+    height: 260,
+    position: 'relative',
   },
-  directoryTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 8,
+  mapHeaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 56 : 44,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
   },
-  directorySubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  emptyDirectory: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  doctorGrid: {
-    gap: 12,
-  },
-  doctorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 12,
-    ...Shadows.light,
-  },
-  doctorAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  doctorAvatarText: {
+  mapTitle: {
+    color: '#fff',
     fontSize: 22,
     fontWeight: '800',
   },
-  doctorName: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  doctorSpec: {
+  mapSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
     marginTop: 2,
+  },
+  recenterBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.light,
+  },
+  mapMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  mapMarkerSelected: {
+    borderWidth: 3,
+    transform: [{ scale: 1.18 }],
+  },
+  mapMarkerInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  markerOnlineDot: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  mapCallout: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    right: 56,
+  },
+  mapCalloutInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  calloutName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  calloutSpec: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  calloutChatBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#4338CA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calloutClose: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomSheet: {
+    flex: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -16,
+    paddingTop: 16,
+    overflow: 'hidden',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: Spacing.md,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+  },
+  filterRow: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  resultsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: Spacing.md,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  docCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    marginBottom: 10,
+    ...Shadows.light,
+  },
+  docAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  docAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  docNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 3,
+  },
+  docName: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  docSpec: {
+    fontSize: 12,
+  },
+  onlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#10B98118',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  onlinePillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  onlinePillText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  docChatBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 40,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  codeBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  codeBarLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  codeBarValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    flex: 1,
+    letterSpacing: 2,
   },
 });

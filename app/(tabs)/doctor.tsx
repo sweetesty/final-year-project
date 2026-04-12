@@ -60,6 +60,7 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMarker, setSelectedMarker] = useState<any | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Derive specialties that actually exist in data
   const availableSpecialties = useMemo(() => {
@@ -215,41 +216,50 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
 
       {/* ── Bottom sheet ── */}
       <View style={[styles.bottomSheet, { backgroundColor: themeColors.background }]}>
-        {/* Search bar */}
-        <View style={[styles.searchBar, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
-          <MaterialIcons name="search" size={20} color={themeColors.muted} />
-          <TextInput
-            style={[styles.searchInput, { color: themeColors.text }]}
-            placeholder="Search by name or specialty…"
-            placeholderTextColor={themeColors.muted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="close" size={18} color={themeColors.muted} />
-            </TouchableOpacity>
-          )}
+        {/* Search bar + filter dropdown trigger */}
+        <View style={styles.searchRow}>
+          <View style={[styles.searchBar, { backgroundColor: themeColors.card, borderColor: themeColors.border, flex: 1 }]}>
+            <MaterialIcons name="search" size={20} color={themeColors.muted} />
+            <TextInput
+              style={[styles.searchInput, { color: themeColors.text }]}
+              placeholder="Search by name or specialty…"
+              placeholderTextColor={themeColors.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <MaterialIcons name="close" size={18} color={themeColors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {/* Filter button */}
+          <TouchableOpacity
+            style={[styles.filterBtn, { backgroundColor: activeFilter !== 'All' ? themeColors.tint : themeColors.card, borderColor: activeFilter !== 'All' ? themeColors.tint : themeColors.border }]}
+            onPress={() => setFilterOpen(o => !o)}
+          >
+            <MaterialIcons name="tune" size={18} color={activeFilter !== 'All' ? '#fff' : themeColors.text} />
+          </TouchableOpacity>
         </View>
 
-        {/* Filter chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {filterChips.map(chip => {
-            const active = activeFilter === chip;
-            return (
-              <TouchableOpacity
-                key={chip}
-                style={[
-                  styles.filterChip,
-                  { borderColor: active ? themeColors.tint : themeColors.text + '30', backgroundColor: active ? themeColors.tint : 'transparent' },
-                ]}
-                onPress={() => setActiveFilter(chip)}
-              >
-                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.text }]} numberOfLines={1}>{chip}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* Dropdown menu */}
+        {filterOpen && (
+          <Animated.View entering={FadeInDown.duration(200)} style={[styles.filterDropdown, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            {filterChips.map(chip => {
+              const active = activeFilter === chip;
+              return (
+                <TouchableOpacity
+                  key={chip}
+                  style={[styles.filterDropdownItem, active && { backgroundColor: themeColors.tint + '20' }]}
+                  onPress={() => { setActiveFilter(chip); setFilterOpen(false); }}
+                >
+                  <Text style={[styles.filterDropdownText, { color: active ? themeColors.tint : themeColors.text, fontWeight: active ? '700' : '400' }]}>{chip}</Text>
+                  {active && <MaterialIcons name="check" size={16} color={themeColors.tint} />}
+                </TouchableOpacity>
+              );
+            })}
+          </Animated.View>
+        )}
 
         {/* Results count */}
         <Text style={[styles.resultsLabel, { color: themeColors.muted }]}>
@@ -1718,8 +1728,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginHorizontal: Spacing.md,
-    marginBottom: 10,
     paddingHorizontal: 14,
     height: 46,
     borderRadius: 14,
@@ -1729,25 +1737,37 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
   },
-  filterRow: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: 10,
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingHorizontal: Spacing.md,
+    marginBottom: 10,
   },
-  filterChip: {
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexShrink: 0,
-    flexGrow: 0,
   },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    flexShrink: 0,
+  filterDropdown: {
+    marginHorizontal: Spacing.md,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  filterDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  filterDropdownText: {
+    fontSize: 14,
   },
   resultsLabel: {
     fontSize: 12,

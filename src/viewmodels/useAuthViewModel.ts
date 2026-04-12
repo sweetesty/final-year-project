@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../services/SupabaseService';
 import { Session } from '@supabase/supabase-js';
 import { BackgroundMonitorService } from '../services/BackgroundMonitorService';
+import * as Location from 'expo-location';
 
 export const useAuthViewModel = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -27,14 +28,17 @@ export const useAuthViewModel = () => {
         const fullName = session.user.user_metadata?.full_name ?? '';
         setRole(userRole);
 
-        // On SIGNED_IN after signup, ensure profile exists (trigger may have run,
-        // but upsert here is safe because auth.uid() is now set)
+        // On SIGNED_IN ensure profile exists, then silently refresh location
         if (_event === 'SIGNED_IN') {
           await supabase.from('profiles').upsert({
             id: session.user.id,
             full_name: fullName,
             role: userRole,
           }, { onConflict: 'id', ignoreDuplicates: true });
+
+          // Silently update location in the background — works for both
+          // new signups and existing accounts logging in
+          refreshLocation(session.user.id).catch(() => {});
         }
       } else {
         setRole(null);
@@ -60,6 +64,16 @@ export const useAuthViewModel = () => {
 
     return () => clearInterval(interval);
   }, [session?.user?.id]);
+
+  const refreshLocation = async (userId: string) => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return;
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    await supabase.from('profiles').update({
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    }).eq('id', userId);
+  };
 
   const signUp = async (
     email: string,

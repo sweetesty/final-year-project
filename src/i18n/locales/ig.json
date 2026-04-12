@@ -8,6 +8,8 @@
     "loading": "Ọ na-ebu...",
     "call": "Kpọọ",
     "video": "Vidio",
+    "patient": "Onye ọrịa",
+    "time": "Oge",
     "language": "Asụsụ",
     "medication": "Ọgwụ",
     "prescription": "Akwụkwọ ọgwụ",
@@ -144,10 +146,10 @@
     "system_settings": "Ntọala Sistemụ",
     "security": "Nchekwa & Nzuzo",
     "version": "Ụlọ Ọrụ Ahụike v2.4.0 (Doctor Mode)",
-    "active_emergencies": "Active Emergencies",
-    "condition": "Condition",
-    "accept_case": "Accept Case",
-    "view_clinical_profile": "View Clinical Profile"
+    "active_emergencies": "Mberede Na-arụ Ọrụ",
+    "condition": "Ọnọdụ Ahụike",
+    "accept_case": "Nara Ikpe",
+    "view_clinical_profile": "Lee Profaịlụ Ọgwụ"
   },
   "pharmacy": {
     "title": "Ụlọ Ọgwụ",

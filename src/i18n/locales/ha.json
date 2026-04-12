@@ -8,6 +8,8 @@
     "loading": "Yana lodawa...",
     "call": "Kira",
     "video": "Bidiyo",
+    "patient": "Majiyyaci",
+    "time": "Lokaci",
     "language": "Harshe",
     "medication": "Maganin",
     "prescription": "Takardar magani",
@@ -144,10 +146,10 @@
     "system_settings": "Saitunan Tsarin",
     "security": "Tsaro & Ɓoye Bayani",
     "version": "Cibiyar Umarni ta Asibiti v2.4.0 (Yanayin Likita)",
-    "active_emergencies": "Active Emergencies",
-    "condition": "Condition",
-    "accept_case": "Accept Case",
-    "view_clinical_profile": "View Clinical Profile"
+    "active_emergencies": "Gaggawa Masu Aiki",
+    "condition": "Yanayin Lafiya",
+    "accept_case": "Karɓi Shari'a",
+    "view_clinical_profile": "Duba Bayanan Asibiti"
   },
   "pharmacy": {
     "title": "Kantin Magani",

@@ -8,6 +8,8 @@
     "loading": "Ó ń gbé e bọ̀...",
     "call": "Pe",
     "video": "Fídíò",
+    "patient": "Aláìsàn",
+    "time": "Àkókò",
     "language": "Èdè",
     "medication": "Oògùn",
     "prescription": "Àṣẹ Oníṣègùn",
@@ -144,10 +146,10 @@
     "system_settings": "Ètò Ìsọfitiwéà",
     "security": "Ààbò & Ìpamọ́",
     "version": "Ìjókòó Àṣẹ Asibiti v2.4.0 (Doctor Mode)",
-    "active_emergencies": "Active Emergencies",
-    "condition": "Condition",
-    "accept_case": "Accept Case",
-    "view_clinical_profile": "View Clinical Profile"
+    "active_emergencies": "Àwọn Ìràngbà Tó Ń Ṣiṣẹ́",
+    "condition": "Ipò Ìlera",
+    "accept_case": "Gba Ìṣẹ́",
+    "view_clinical_profile": "Wo Profáìlì Ìṣègùn"
   },
   "pharmacy": {
     "title": "Ilé Oògùn",

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useRootNavigationState } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeIn, SlideInRight, SlideInLeft } from 'react-native-reanimated';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -75,7 +76,17 @@ export default function AiChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
-      <Stack.Screen options={{ title: t('ai.title'), headerShown: true }} />
+      <Stack.Screen
+        options={{
+          title: t('ai.title'),
+          headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
+              <MaterialIcons name="arrow-back" size={24} color={themeColors.text} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       
       <FlatList
         ref={flatListRef}

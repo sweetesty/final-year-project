@@ -130,7 +130,8 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
     }
   };
 
-  const mapDoctors = filteredDoctors.filter((d: any) => d.latitude && d.longitude);
+  // Always show nearby doctors on the map regardless of which filter is active
+  const mapDoctors = nearbyDoctors.filter((d: any) => d.latitude && d.longitude);
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -239,11 +240,11 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 key={chip}
                 style={[
                   styles.filterChip,
-                  { borderColor: active ? themeColors.tint : themeColors.border, backgroundColor: active ? themeColors.tint : themeColors.card },
+                  { borderColor: active ? themeColors.tint : themeColors.text + '30', backgroundColor: active ? themeColors.tint : 'transparent' },
                 ]}
                 onPress={() => setActiveFilter(chip)}
               >
-                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.muted }]}>{chip}</Text>
+                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.text }]}>{chip}</Text>
               </TouchableOpacity>
             );
           })}

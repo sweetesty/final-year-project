@@ -7,7 +7,7 @@ export type FallDetectionState =
 
 export interface FallEvent {
   id: string;
-  patientId: string;
+  patientid: string;
   timestamp: string;
   location: {
     latitude: number;
@@ -30,7 +30,7 @@ export interface EmergencyPayload {
   };
   timestamp: string;
   vitalSnapshot?: {
-    heartRate?: number;
-    oxygenLevel?: number;
+    heartrate?: number;
+    spo2?: number;
   };
 }

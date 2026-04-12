@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { SensorService } from '../services/SensorService';
 import { FallDetectionState } from '../models/FallEvent';
@@ -8,102 +8,141 @@ import { SmsService } from '../services/SmsService';
 import { supabase } from '../services/SupabaseService';
 import { AiModelService } from '../services/AiModelService';
 import { SignalService } from '../services/SignalService';
-import { OpenAiService } from '../services/OpenAiService';
+
+const RESPONSE_WINDOW_MS = 20_000;
 
 export const useFallDetectionViewModel = (
-  fallThreshold: number = 2.5, // G-Force threshold
-  impactWindow: number = 2000 // ms
+  patientId:   string,
+  patientName: string,
 ) => {
-  const [state, setState] = useState<FallDetectionState>('idle');
+  const [state,      setState]      = useState<FallDetectionState>('idle');
   const [lastGForce, setLastGForce] = useState(0);
-  const [timer, setTimer] = useState<number | null>(null);
 
-  useEffect(() => {
-    // Initialize AI Model
-    AiModelService.init();
-  }, []);
+  const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateRef    = useRef<FallDetectionState>('idle'); // mirror for use inside callbacks
 
+  // Keep stateRef in sync
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  useEffect(() => { AiModelService.init(); }, []);
+
+  // ── Emergency dispatch ────────────────────────────────────────────────────
   const triggerEmergency = useCallback(async () => {
     setState('emergency_triggered');
-    SpeechService.speak("I'm sorry, you didn't respond. I'm calling for help now. Please stay calm.");
-    
-    // 1. Get Location
-    const coords = await LocationService.trackLocation('patient-123');
-    const mapsLink = coords ? LocationService.getMapsLink(coords.latitude, coords.longitude) : "Unknown Location";
+    stateRef.current = 'emergency_triggered';
+    SpeechService.speak("I couldn't reach you. Alerting your emergency contacts now. Please stay calm.");
 
-    // 2. Fetch Primary Contact
-    const { data: contacts } = await supabase
+    const coords   = await LocationService.trackLocation(patientId);
+    const mapsLink = coords
+      ? LocationService.getMapsLink(coords.latitude, coords.longitude)
+      : 'Unknown Location';
+
+    await supabase.from('fall_events').insert({
+      patientid:  patientId,
+      latitude:   coords?.latitude  ?? null,
+      longitude:  coords?.longitude ?? null,
+      timestamp:  new Date().toISOString(),
+      confirmed:  true,
+      source:     'foreground',
+    });
+
+    const { data: contact } = await supabase
       .from('emergency_contacts')
-      .select('*')
-      .eq('patientId', 'patient-123')
-      .eq('isPrimary', true)
+      .select('phone, name')
+      .eq('patientid', patientId)
+      .eq('isprimary', true)
       .single();
 
-    if (contacts) {
-      const message = `EMERGENCY ALERT: [Patient Name] has detected a fall! Location: ${mapsLink}`;
-      await SmsService.sendEmergencySms(contacts.phone, message);
+    if (contact) {
+      await SmsService.sendEmergencySms(
+        contact.phone,
+        `EMERGENCY: ${patientName} has fallen at ${new Date().toLocaleString()}.\nLocation: ${mapsLink}\nPlease respond immediately.`,
+      );
     }
 
-    console.log('EMERGENCY TRIGGERED: Fall confirmed and alerts sent');
+    const { data: links } = await supabase
+      .from('doctor_patient_links')
+      .select('doctor_id')
+      .eq('patient_id', patientId);
+
+    if (links?.length) {
+      const { data: doctors } = await supabase
+        .from('profiles')
+        .select('push_token')
+        .in('id', links.map((l: any) => l.doctor_id))
+        .not('push_token', 'is', null);
+
+      const tokens = (doctors ?? []).map((p: any) => p.push_token).filter(Boolean);
+      if (tokens.length) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(tokens.map((token: string) => ({
+            to: token, priority: 'high', sound: 'default',
+            title: 'EMERGENCY: Fall Detected',
+            body:  `${patientName} has fallen. Location: ${mapsLink}`,
+            data:  { type: 'fall_alert', patientId, mapsLink },
+          }))),
+        });
+      }
+    }
+    console.log('[FallDetection] Emergency dispatched.');
+  }, [patientId, patientName]);
+
+  // ── Cancel ────────────────────────────────────────────────────────────────
+  const cancelAlert = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setState('idle');
+    stateRef.current = 'idle';
+    SpeechService.speak("Glad you're okay. I'll keep monitoring.");
   }, []);
 
-  const handleSuspiciousMovement = useCallback(async (gForce: number) => {
-    setLastGForce(gForce);
-    setState('suspicious');
-    
-    // Allow 500ms for the buffer to fill
-    setTimeout(async () => {
-      const { isFall, confidence } = await AiModelService.predictFall();
-      
-      if (isFall) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setState('user_response_window');
+  // ── Fall confirmed by SignalService state machine ─────────────────────────
+  const onFallConfirmed = useCallback(async (peakG: number) => {
+    // Ignore if we're already handling an alert
+    if (stateRef.current !== 'idle') return;
 
-        // Dynamic OpenAI Triage Response
-        const triageResponse = await OpenAiService.getEmergencyTriage(
-          "No voice input yet", 
-          `G-Force Magnitude: ${gForce.toFixed(2)}`
-        );
-        SpeechService.speak(triageResponse);
-        
-        const countdown = setTimeout(() => {
-          triggerEmergency();
-        }, 20000);
-        setTimer(countdown as unknown as number);
-      } else {
-        setState('idle');
-      }
-    }, 500);
-  }, [triggerEmergency]);
+    console.log(`[FallDetection] Confirmed fall — peakG=${peakG.toFixed(2)}`);
+    setLastGForce(peakG);
+    setState('user_response_window');
+    stateRef.current = 'user_response_window';
 
-  const cancelAlert = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
-    }
-    setState('idle');
-  }, [timer]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
+    // Voice triage — local phrases, no API call (avoids quota errors + zero latency)
+    const triagePhrases = [
+      `${patientName}, I detected a fall. Are you okay? If you need help, stay still. I'll alert your contacts in 20 seconds. Tap cancel if you're fine.`,
+      `Hey ${patientName}, it looks like you may have fallen. Please don't worry, I'm here. Tap the cancel button if you're alright, otherwise I'll call for help shortly.`,
+      `${patientName}, are you okay? I noticed a sudden impact. Stay calm — I'm giving you 20 seconds to let me know you're fine before I alert your emergency contacts.`,
+    ];
+    SpeechService.speak(triagePhrases[Math.floor(Math.random() * triagePhrases.length)]);
+
+    timerRef.current = setTimeout(() => { triggerEmergency(); }, RESPONSE_WINDOW_MS);
+  }, [patientName, triggerEmergency]);
+
+  // ── Sensor loop ───────────────────────────────────────────────────────────
   useEffect(() => {
-    SensorService.setUpdateInterval(100);
+    // Register the fall callback with SignalService
+    SignalService.onFallDetected(onFallConfirmed);
+
+    SensorService.setUpdateInterval(50); // 20 Hz
     SensorService.startMonitoring((data) => {
-      SignalService.addSample(data);
-      const gForce = SensorService.calculateGForce(data.accelerometer);
-      if (state === 'idle' && gForce > fallThreshold) {
-        handleSuspiciousMovement(gForce);
-      }
+      SignalService.addSample(data); // state machine runs inside addSample
     });
 
     return () => {
       SensorService.stopMonitoring();
-      if (timer) clearTimeout(timer);
+      SignalService.clearFallCallback();
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [state, fallThreshold, handleSuspiciousMovement, timer]);
+  }, [onFallConfirmed]);
 
   return {
     state,
     lastGForce,
     cancelAlert,
     triggerEmergency,
+    isUserActive: SignalService.isUserActive(),
   };
 };

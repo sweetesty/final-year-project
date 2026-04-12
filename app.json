@@ -11,7 +11,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMotionUsageDescription": "Allow Vitals Fusion to access motion data for fall detection.",
+        "UIBackgroundModes": [
+          "fetch"
+        ],
+        "NSMotionUsageDescription": "Allow Vitals Fusion to access motion data for fall detection and step counting.",
         "NSAccelerometerUsageDescription": "Allow Vitals Fusion to access the accelerometer for health monitoring."
       }
     },
@@ -23,7 +26,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACTIVITY_RECOGNITION"
+      ]
     },
     "web": {
       "output": "static",
@@ -53,6 +60,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1b4da79e-db2e-4321-a2aa-6211aee5e081"
+      }
+    },
+    "owner": "sweetesty"
   }
 }

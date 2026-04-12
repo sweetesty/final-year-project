@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { OpenAiService } from '../services/OpenAiService';
 import { SpeechService } from '../services/SpeechService';
 import { VoiceService } from '../services/VoiceService';
 import { supabase } from '../services/SupabaseService';
+import { useAuthViewModel } from './useAuthViewModel';
 
 export interface Message {
   id: string;
@@ -11,37 +13,43 @@ export interface Message {
   timestamp: Date;
 }
 
-export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
+export const useAiAssistantViewModel = () => {
+  const { session } = useAuthViewModel();
+  const patientId = session?.user?.id ?? '';
+  const patientName = session?.user?.user_metadata?.full_name ?? 'the patient';
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: "Hello! I'm your OpenAI-powered Vitals Fusion companion. How are you feeling today?",
+      text: "Hello! I'm your Vitals Fusion AI companion. How are you feeling today?",
       sender: 'assistant',
       timestamp: new Date(),
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
 
   const getPatientContext = async () => {
+    if (!patientId) return "Patient not authenticated.";
     try {
       // 1. Fetch Medications
       const { data: meds } = await supabase
         .from('medications')
         .select('name, dosage, frequency')
-        .eq('patientId', patientId);
-      
+        .eq('patientid', patientId);
+
       // 2. Fetch Profile
       const { data: profile } = await supabase
-        .from('medical_details') // Assuming this exists or using medical-details.tsx logic
+        .from('medical_details')
         .select('*')
-        .eq('patientId', patientId)
+        .eq('patientid', patientId)
         .single();
 
       return `
-      PATIENT NAME: Esther Ajanaku
+      PATIENT NAME: ${patientName}
       MEDICATIONS: ${meds?.map(m => `${m.name} (${m.dosage}) ${m.frequency}`).join(', ') || 'No medications listed'}
-      MEDICAL PROFILE: ${profile ? JSON.stringify(profile) : 'Basic healthy status, no chronic alerts'}
+      MEDICAL PROFILE: ${profile ? JSON.stringify(profile) : 'No medical profile on record'}
       `;
     } catch (error) {
       console.error("Context Fetch Error:", error);
@@ -49,7 +57,7 @@ export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
     }
   };
 
-  const sendMessage = useCallback(async (text: string, voiceMode = false) => {
+  const sendMessage = useCallback(async (text: string, forceVoice = false) => {
     if (!text.trim()) return;
 
     const userMsg: Message = {
@@ -64,7 +72,7 @@ export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
 
     const context = await getPatientContext();
     const responseText = await OpenAiService.sendMessage(text, context);
-    
+
     const assistantMsg: Message = {
       id: (Date.now() + 1).toString(),
       text: responseText,
@@ -75,21 +83,30 @@ export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
     setMessages(prev => [...prev, assistantMsg]);
     setIsLoading(false);
 
-    if (voiceMode) {
+    // Speak if voice reply is on globally, or if this specific call forces it (voice note input)
+    if (forceVoice || voiceReplyEnabled) {
       await SpeechService.speak(responseText);
     }
-  }, [patientId]);
+  }, [patientId, voiceReplyEnabled]);
 
   const startVoiceChat = async () => {
     setIsListening(true);
     try {
-      // Use VoiceService to capture speech
       const text = await VoiceService.captureSpeechOnce();
       if (text) {
         await sendMessage(text, true);
       }
-    } catch (error) {
-      console.error("Voice Chat Error:", error);
+    } catch (error: any) {
+      const msg = typeof error === 'string' ? error : error?.message ?? '';
+      if (msg.toLowerCase().includes('expo go') || msg.toLowerCase().includes('not available')) {
+        Alert.alert(
+          'Voice Input Unavailable',
+          'Voice input requires a development build. You can still type your message below.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.error('Voice Chat Error:', error);
+      }
     } finally {
       setIsListening(false);
     }
@@ -99,6 +116,8 @@ export const useAiAssistantViewModel = (patientId: string = 'patient-123') => {
     messages,
     isLoading,
     isListening,
+    voiceReplyEnabled,
+    setVoiceReplyEnabled,
     sendMessage,
     startVoiceChat,
   };

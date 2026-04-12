@@ -1,17 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-url-polyfill/auto';
 
-// These should ideally be in an .env file
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('⚠️ Supabase credentials NOT found in environment! Check your .env file.');
+const isConfigured = supabaseUrl && !supabaseUrl.includes('placeholder');
+
+if (!isConfigured) {
+  console.warn('⚠️ Supabase credentials are placeholders. Backend features disabled until configured.');
 } else {
-  console.log('✅ Supabase initialized with URL:', supabaseUrl.substring(0, 15) + '...');
+  console.log('✅ Supabase initialized with URL:', supabaseUrl.substring(0, 20) + '...');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// AsyncStorage persists the session across app restarts — users stay logged in
+export const supabase = createClient(
+  isConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  isConfigured ? supabaseAnonKey : 'placeholder',
+  {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  }
+);
 
 export class DataService {
   /**

@@ -5,7 +5,6 @@ import { Medication } from '../models/Medication';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -38,10 +37,10 @@ export class NotificationService {
     }
 
     try {
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-      if (!projectId) {
-        console.warn('EAS Project ID not found in app.json. Fetching token might fail.');
-      }
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId ??
+        '1b4da79e-db2e-4321-a2aa-6211aee5e081';
 
       token = (await Notifications.getExpoPushTokenAsync({
         projectId,
@@ -69,16 +68,26 @@ export class NotificationService {
 
   static async scheduleMedicationReminders(medication: Medication) {
     const { name, times, isCritical, frequency, specificDays } = medication;
-    
+
     for (const time of times) {
       const [hours, minutes] = time.split(':').map(Number);
-      
+
+      const title = medication.isCritical 
+        ? '⚠️ CRITICAL MEDICATION' 
+        : medication.isPrescribed 
+          ? '📋 PRESCRIBED DOSE' 
+          : '💊 Medication Reminder';
+
+      const body = medication.isPrescribed 
+        ? `It's time for your prescribed ${name}.`
+        : `Reminder to take your ${name}.`;
+
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: isCritical ? '⚠️ CRITICAL MEDICATION' : 'Medication Reminder',
-          body: `It's time to take your ${name}.`,
+          title,
+          body,
           data: { medicationId: medication.id },
-          sound: isCritical ? 'critical' : 'default',
+          sound: medication.isCritical ? 'critical' : 'default',
         },
         trigger: this.getTriggerForFrequency(frequency, hours, minutes, specificDays),
       });
@@ -88,9 +97,9 @@ export class NotificationService {
   }
 
   private static getTriggerForFrequency(
-    frequency: string, 
-    hour: number, 
-    minute: number, 
+    frequency: string,
+    hour: number,
+    minute: number,
     specificDays?: number[]
   ): Notifications.NotificationTriggerInput {
     if (frequency === 'daily') {
@@ -101,11 +110,11 @@ export class NotificationService {
         repeats: true,
       };
     }
-    
+
     if (frequency === 'weekly' && specificDays && specificDays.length > 0) {
       return {
         type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-        weekday: specificDays[0] + 1, // Expo weekday is 1-7
+        weekday: specificDays[0] + 1,
         hour,
         minute,
         repeats: true,

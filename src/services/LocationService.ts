@@ -2,49 +2,56 @@ import * as Location from 'expo-location';
 import { supabase } from './SupabaseService';
 
 export class LocationService {
-  static async requestPermissions() {
-    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-    if (foregroundStatus !== 'granted') {
-      console.warn('Foreground location permission denied');
+
+  static async requestPermissions(): Promise<boolean> {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      return status === 'granted';
+    } catch (e) {
+      console.warn('[Location] Permission request failed:', e);
       return false;
     }
-
-    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    if (backgroundStatus !== 'granted') {
-      console.warn('Background location permission denied');
-      // Background location is not strictly required for foreground testing
-    }
-    return true;
   }
 
   static async getCurrentLocation() {
     try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        // Try to request — if it fails or is denied, return null gracefully
+        const result = await Location.requestForegroundPermissionsAsync();
+        if (result.status !== 'granted') {
+          console.warn('[Location] Permission not granted — skipping location.');
+          return null;
+        }
+      }
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
       });
       return location.coords;
     } catch (error) {
-      console.error('Error getting current location:', error);
+      // Never throw — location is optional, emergency must still proceed
+      console.warn('[Location] Could not get location:', (error as any)?.message ?? error);
       return null;
     }
   }
 
   static async trackLocation(patientId: string) {
     const coords = await this.getCurrentLocation();
-    if (coords) {
-      await supabase.from('patient_locations').insert({
-        patientId,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy || 0,
-        timestamp: new Date().toISOString(),
+    if (coords && patientId) {
+      supabase.from('patient_locations').insert({
+        patientid:  patientId,
+        latitude:   coords.latitude,
+        longitude:  coords.longitude,
+        accuracy:   coords.accuracy ?? 0,
+        timestamp:  new Date().toISOString(),
+      }).then(({ error }) => {
+        if (error) console.warn('[Location] Failed to log location:', error.message);
       });
-      return coords;
     }
-    return null;
+    return coords ?? null;
   }
 
   static getMapsLink(latitude: number, longitude: number) {
-    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    return `https://maps.google.com/?q=${latitude},${longitude}`;
   }
 }

@@ -3,8 +3,8 @@ import { HealthVital } from '../models/Vitals';
 
 export const useVitalsViewModel = (patientId: string) => {
   const [currentVitals, setCurrentVitals] = useState<Partial<HealthVital>>({
-    heartRate: 72,
-    oxygenLevel: 98,
+    heartrate: 72,
+    spo2: 98,
     bloodPressure: { systolic: 120, diastolic: 80 },
     temperature: 36.6,
   });
@@ -14,8 +14,8 @@ export const useVitalsViewModel = (patientId: string) => {
     const interval = setInterval(() => {
       setCurrentVitals(prev => ({
         ...prev,
-        heartRate: (prev.heartRate || 72) + (Math.random() > 0.5 ? 1 : -1),
-        oxygenLevel: Math.random() > 0.95 ? 97 : 98,
+        heartrate: (prev.heartrate || 72) + (Math.random() > 0.5 ? 1 : -1),
+        spo2: Math.random() > 0.95 ? 97 : 98,
       }));
     }, 3000);
 

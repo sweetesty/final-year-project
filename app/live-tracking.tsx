@@ -5,26 +5,32 @@ import { Stack } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
+import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LiveTrackingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
-  
+  const { session } = useAuthViewModel();
+  const patientId = session?.user?.id ?? '';
+  const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
+
   const [locations, setLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!patientId) return;
+
     // 1. Fetch initial history
     const fetchHistory = async () => {
       const { data } = await supabase
         .from('patient_locations')
         .select('*')
-        .eq('patientId', 'patient-123')
+        .eq('patientid', patientId)
         .order('timestamp', { ascending: false })
         .limit(20);
-      
+
       if (data) setLocations(data.reverse());
       setLoading(false);
     };
@@ -33,12 +39,12 @@ export default function LiveTrackingScreen() {
 
     // 2. Subscribe to real-time updates
     const channel = supabase
-      .channel('patient-location-updates')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
+      .channel(`patient-location-updates-${patientId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
         table: 'patient_locations',
-        filter: `patientId=eq.patient-123`
+        filter: `patientid=eq.${patientId}`
       }, (payload) => {
         setLocations(prev => [...prev, payload.new].slice(-20));
       })
@@ -104,7 +110,7 @@ export default function LiveTrackingScreen() {
 
       {latest && (
         <View style={[styles.infoCard, { backgroundColor: themeColors.card }]}>
-          <Text style={[styles.patientName, { color: themeColors.text }]}>Patient: Esther Ajanaku</Text>
+          <Text style={[styles.patientName, { color: themeColors.text }]}>Patient: {patientName}</Text>
           <Text style={{ color: themeColors.muted }}>Last Updated: {new Date(latest.timestamp).toLocaleTimeString()}</Text>
           <View style={styles.statusRow}>
             <View style={[styles.dot, { backgroundColor: themeColors.vital }]} />

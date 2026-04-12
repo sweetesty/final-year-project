@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useTranslation } from 'react-i18next';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -11,6 +12,7 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const themeColors = Colors[colorScheme ?? 'light'];
   const { role } = useAuthViewModel();
+  const { t } = useTranslation();
 
   const isDoctor = role === 'doctor';
 
@@ -23,46 +25,86 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: themeColors.card,
           borderTopColor: themeColors.border,
-        }
-      }}>
-      
-      {/* Home Tab (Patient Agent) */}
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Intelligence',
-          href: isDoctor ? null : '/', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: t('tabs.home'),
+          href: isDoctor ? null : '/',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="home" size={size} color={color} />,
         }}
       />
 
-      {/* Doctor tab (For Doctors) */}
+      <Tabs.Screen
+        name="doctor-home"
+        options={{
+          title: t('tabs.clinical_home'),
+          href: isDoctor ? '/doctor-home' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="dashboard" size={size} color={color} />,
+        }}
+      />
+
       <Tabs.Screen
         name="doctor"
         options={{
-          title: 'Patients',
-          href: isDoctor ? '/doctor' : null, // Hide for Patient
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          title: t('tabs.clinical_panel'),
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
         }}
       />
 
-      {/* Medication tab (For Patients) */}
+      <Tabs.Screen
+        name="clinical-messages"
+        options={{
+          title: t('tabs.messages'),
+          href: isDoctor ? '/clinical-messages' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="chat" size={size} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="clinical-alerts"
+        options={{
+          title: t('tabs.alerts'),
+          href: isDoctor ? '/clinical-alerts' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="notification-important" size={size} color={color} />,
+        }}
+      />
+
       <Tabs.Screen
         name="medication"
         options={{
-          title: 'Medication',
-          href: isDoctor ? null : '/medication', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="pills.fill" color={color} />,
+          title: t('tabs.medication'),
+          href: isDoctor ? null : '/medication',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="medication" size={size} color={color} />,
         }}
       />
 
-      {/* AI Companion tab (For Patients) */}
       <Tabs.Screen
         name="ai-chat"
         options={{
-          title: 'AI Companion',
-          href: isDoctor ? null : '/ai-chat', // Hide for Doctor
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles.fill" color={color} />,
+          title: t('tabs.ai_chat'),
+          tabBarButton: () => null,
+          tabBarItemStyle: { display: 'none', width: 0 },
+        }}
+      />
+
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: t('tabs.pharmacy'),
+          href: isDoctor ? null : '/explore',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="local-pharmacy" size={size} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="clinical-profile"
+        options={{
+          title: t('tabs.profile'),
+          href: '/clinical-profile',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="account-circle" size={size} color={color} />,
         }}
       />
     </Tabs>

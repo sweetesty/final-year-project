@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, Text, Dimensions } from 'react-native';
-import { LineChart, ProgressChart } from 'react-native-chart-kit';
+import { LineChart, ProgressChart, BarChart } from 'react-native-chart-kit';
 import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -13,35 +13,37 @@ interface VitalsChartProps {
 
 export const VitalsTrendChart = ({ data, labels, theme }: VitalsChartProps) => {
   return (
-    <View style={styles.container}>
-      <Text style={[styles.chartTitle, { color: theme.text }]}>Heart Rate Trend (24h)</Text>
+    <View style={styles.chartWrapper}>
       <LineChart
         data={{
           labels,
           datasets: [{ data }],
         }}
-        width={width - Spacing.lg * 2}
-        height={220}
+        width={width - 48}
+        height={200}
         chartConfig={{
-          backgroundColor: theme.card,
-          backgroundGradientFrom: theme.card,
-          backgroundGradientTo: theme.card,
+          backgroundGradientFrom: 'rgba(255, 255, 255, 0)',
+          backgroundGradientTo: 'rgba(255, 255, 255, 0)',
           decimalPlaces: 0,
-          color: (opacity = 1) => theme.vital,
-          labelColor: (opacity = 1) => theme.muted,
-          style: {
-            borderRadius: BorderRadius.xl,
-          },
+          color: (opacity = 1) => theme.vital || '#10B981',
+          labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+          style: { borderRadius: 16 },
           propsForDots: {
-            r: "5",
+            r: "4",
             strokeWidth: "2",
-            stroke: theme.vital,
+            stroke: "#fff",
+          },
+          propsForBackgroundLines: {
+            strokeDasharray: '0',
+            stroke: 'rgba(148, 163, 184, 0.1)',
           }
         }}
         bezier
+        withInnerLines={true}
+        withOuterLines={false}
         style={{
           marginVertical: 8,
-          borderRadius: BorderRadius.xl,
+          borderRadius: 16,
         }}
       />
     </View>
@@ -55,28 +57,92 @@ interface AdherenceChartProps {
 
 export const AdherenceScoreChart = ({ score, theme }: AdherenceChartProps) => {
   return (
-    <View style={styles.container}>
-      <Text style={[styles.chartTitle, { color: theme.text }]}>Medication Adherence</Text>
+    <View style={styles.chartWrapper}>
       <ProgressChart
         data={{
-          labels: ["Taken"],
+          labels: ["Adherence"],
           data: [score]
         }}
-        width={width - Spacing.lg * 2}
-        height={220}
-        strokeWidth={16}
-        radius={32}
+        width={width - 64}
+        height={160}
+        strokeWidth={14}
+        radius={48}
         chartConfig={{
-          backgroundColor: theme.card,
-          backgroundGradientFrom: theme.card,
-          backgroundGradientTo: theme.card,
+          backgroundGradientFrom: 'rgba(255, 255, 255, 0)',
+          backgroundGradientTo: 'rgba(255, 255, 255, 0)',
           color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
           labelColor: (opacity = 1) => theme.muted,
         }}
         hideLegend={false}
         style={{
           marginVertical: 8,
-          borderRadius: BorderRadius.xl,
+          borderRadius: 16,
+        }}
+      />
+    </View>
+  );
+};
+
+export const FallFrequencyChart = ({ data, labels, theme }: VitalsChartProps) => {
+  return (
+    <View style={styles.chartWrapper}>
+      <BarChart
+        data={{
+          labels,
+          datasets: [{ data }],
+        }}
+        width={width - 48}
+        height={180}
+        yAxisLabel=""
+        yAxisSuffix=""
+        chartConfig={{
+          backgroundGradientFrom: 'rgba(255, 255, 255, 0)',
+          backgroundGradientTo: 'rgba(255, 255, 255, 0)',
+          decimalPlaces: 0,
+          color: (opacity = 1) => theme.emergency || '#EF4444',
+          labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+          barPercentage: 0.6,
+          propsForBackgroundLines: {
+            strokeDasharray: '4',
+            stroke: 'rgba(148, 163, 184, 0.1)',
+          }
+        }}
+        style={{
+          marginVertical: 8,
+          borderRadius: 16,
+        }}
+        showValuesOnTopOfBars={true}
+        fromZero={true}
+      />
+    </View>
+  );
+};
+
+export const ActivityIntensityChart = ({ data, labels, theme }: VitalsChartProps) => {
+  return (
+    <View style={styles.chartWrapper}>
+      <LineChart
+        data={{
+          labels,
+          datasets: [{ data }],
+        }}
+        width={width - 48}
+        height={180}
+        chartConfig={{
+          backgroundGradientFrom: 'rgba(255, 255, 255, 0)',
+          backgroundGradientTo: 'rgba(255, 255, 255, 0)',
+          decimalPlaces: 1,
+          color: (opacity = 1) => theme.tint || '#6366F1',
+          labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+          propsForBackgroundLines: {
+             strokeDasharray: '0',
+             stroke: 'rgba(148, 163, 184, 0.05)',
+          }
+        }}
+        bezier
+        style={{
+          marginVertical: 8,
+          borderRadius: 16,
         }}
       />
     </View>
@@ -86,6 +152,11 @@ export const AdherenceScoreChart = ({ score, theme }: AdherenceChartProps) => {
 const styles = StyleSheet.create({
   container: {
     marginVertical: Spacing.md,
+  },
+  chartWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   chartTitle: {
     fontSize: 16,

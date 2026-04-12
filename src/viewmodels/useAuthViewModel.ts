@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/SupabaseService';
 import { Session } from '@supabase/supabase-js';
+import { BackgroundMonitorService } from '../services/BackgroundMonitorService';
+import * as Location from 'expo-location';
 
 export const useAuthViewModel = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -19,10 +21,25 @@ export const useAuthViewModel = () => {
 
     fetchSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session?.user?.user_metadata?.role) {
-        setRole(session.user.user_metadata.role);
+      if (session?.user) {
+        const userRole = session.user.user_metadata?.role ?? 'patient';
+        const fullName = session.user.user_metadata?.full_name ?? '';
+        setRole(userRole);
+
+        // On SIGNED_IN ensure profile exists, then silently refresh location
+        if (_event === 'SIGNED_IN') {
+          await supabase.from('profiles').upsert({
+            id: session.user.id,
+            full_name: fullName,
+            role: userRole,
+          }, { onConflict: 'id', ignoreDuplicates: true });
+
+          // Silently update location in the background — works for both
+          // new signups and existing accounts logging in
+          refreshLocation(session.user.id).catch(() => {});
+        }
       } else {
         setRole(null);
       }
@@ -31,7 +48,77 @@ export const useAuthViewModel = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Heartbeat: update last_seen every 30 seconds so presence is accurate globally
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const updateLastSeen = async () => {
+      await supabase
+        .from('profiles')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('id', session.user.id);
+    };
+
+    updateLastSeen(); // immediate on open
+    const interval = setInterval(updateLastSeen, 30000); // every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
+  const refreshLocation = async (userId: string) => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return;
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    await supabase.from('profiles').update({
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    }).eq('id', userId);
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string = '',
+    userRole: 'patient' | 'doctor' = 'patient',
+    location?: { latitude: number; longitude: number },
+    specialization?: string,
+  ) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName, role: userRole },
+      },
+    });
+    if (error) throw error;
+
+    // Profile is created by the DB trigger (handle_new_user).
+    // Save location + specialization immediately after — the trigger runs
+    // server-side so we just update the row once the session settles.
+    if (data.user && (location || specialization)) {
+      const updates: Record<string, any> = {};
+      if (location) {
+        updates.latitude = location.latitude;
+        updates.longitude = location.longitude;
+      }
+      if (specialization) updates.specialization = specialization;
+
+      // Retry a couple of times — the trigger insert may not be committed yet
+      for (let i = 0; i < 3; i++) {
+        await new Promise(r => setTimeout(r, 800));
+        const { error: upErr } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', data.user.id);
+        if (!upErr) break;
+      }
+    }
+
+    return data;
+  };
+
   const signOut = async () => {
+    await BackgroundMonitorService.unregister();
     await supabase.auth.signOut();
     setRole(null);
   };
@@ -40,6 +127,7 @@ export const useAuthViewModel = () => {
     session,
     loading,
     role,
+    signUp,
     signOut,
     isAuthenticated: !!session,
   };

@@ -10,6 +10,8 @@ export interface Medication {
   specificDays?: number[]; // 0-6 (Sunday-Saturday)
   times: string[]; // ["HH:mm"]
   isCritical: boolean;
+  isPrescribed: boolean;
+  prescribedBy?: string;
   createdAt: string;
 }
 

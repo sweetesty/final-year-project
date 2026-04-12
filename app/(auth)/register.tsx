@@ -3,27 +3,31 @@ import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
-import { Stack, Link } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
+type Role = 'patient' | 'doctor';
+
 export default function RegisterScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const router = useRouter();
   const { signUp } = useAuthViewModel();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<'patient' | 'doctor'>('patient');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [role, setRole] = useState<Role>('patient');
   const [specialization, setSpecialization] = useState('');
   const [loading, setLoading] = useState(false);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'fetching' | 'granted' | 'denied'>('idle');
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [error, setError] = useState('');
 
   const requestLocation = async () => {
     setLocationStatus('fetching');
@@ -31,10 +35,6 @@ export default function RegisterScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationStatus('denied');
-        Alert.alert(
-          'Location Needed',
-          'Your location helps connect you with nearby doctors. You can still sign up, but nearby features won\'t work.'
-        );
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -46,197 +46,220 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
+    setError('');
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Please fill in all required fields.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', "Passwords don't match.");
+      setError("Passwords don't match.");
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Weak Password', 'Password must be at least 6 characters.');
+      setError('Password must be at least 6 characters.');
       return;
     }
     if (role === 'doctor' && !specialization.trim()) {
-      Alert.alert('Specialization Required', 'Please enter your medical specialization.');
+      setError('Please enter your medical specialization.');
       return;
     }
     setLoading(true);
     try {
-      await signUp(email, password, fullName, role, coords ?? undefined, specialization.trim() || undefined);
-      Alert.alert('Welcome!', 'Your account has been created.');
-    } catch (error: any) {
-      Alert.alert('Sign Up Failed', error.message);
+      await signUp(email.trim(), password, fullName.trim(), role, coords ?? undefined, specialization.trim() || undefined);
+      Alert.alert('Account Created', 'Welcome to Vitals Fusion!');
+    } catch (e: any) {
+      setError(e.message ?? 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const locationColor =
-    locationStatus === 'granted' ? '#10B981' :
-    locationStatus === 'denied' ? '#EF4444' :
-    locationStatus === 'fetching' ? themeColors.tint :
-    themeColors.muted;
-
-  const locationLabel =
-    locationStatus === 'granted' ? 'Location captured' :
-    locationStatus === 'denied' ? 'Location denied — tap to retry' :
-    locationStatus === 'fetching' ? 'Getting location...' :
-    'Tap to enable location access';
+  const Field = ({
+    icon, placeholder, value, onChangeText, secure, showToggle, onToggle, keyboardType, autoCapitalize,
+  }: any) => (
+    <View style={styles.inputWrap}>
+      <MaterialIcons name={icon} size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
+      <TextInput
+        style={[styles.input, { flex: 1 }]}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(255,255,255,0.3)"
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secure}
+        keyboardType={keyboardType ?? 'default'}
+        autoCapitalize={autoCapitalize ?? 'sentences'}
+      />
+      {showToggle !== undefined && (
+        <TouchableOpacity onPress={onToggle} style={styles.eyeBtn}>
+          <MaterialIcons name={showToggle ? 'visibility-off' : 'visibility'} size={18} color="rgba(255,255,255,0.35)" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.container, { backgroundColor: themeColors.background }]}
-    >
-      <Stack.Screen options={{ title: 'Create Account', headerShown: false }} />
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.root}>
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerStyle={styles.scrollInner} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: themeColors.text }]}>Join Vitals Fusion</Text>
-          <Text style={[styles.subtitle, { color: themeColors.muted }]}>Create your secure healthcare account</Text>
-        </View>
+      <LinearGradient colors={['#0F0F1A', '#1E1B4B', '#0F0F1A']} style={StyleSheet.absoluteFill} />
+      <View style={[styles.orb, styles.orb1]} />
+      <View style={[styles.orb, styles.orb2]} />
 
-        {/* Role Selector */}
-        <View style={styles.roleContainer}>
-          {(['patient', 'doctor'] as const).map(r => (
-            <TouchableOpacity
-              key={r}
-              style={[
-                styles.roleButton,
-                { borderColor: themeColors.border },
-                role === r && { backgroundColor: themeColors.tint, borderColor: themeColors.tint },
-              ]}
-              onPress={() => setRole(r)}
-            >
-              <MaterialIcons
-                name={r === 'patient' ? 'personal-injury' : 'medical-services'}
-                size={18}
-                color={role === r ? '#fff' : themeColors.muted}
-              />
-              <Text style={[styles.roleText, { color: role === r ? '#fff' : themeColors.muted }]}>
-                {r === 'patient' ? 'Patient' : 'Doctor'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Brand */}
+        <Animated.View entering={FadeInDown.delay(80).duration(500)} style={styles.brand}>
+          <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.logoBox}>
+            <MaterialIcons name="favorite" size={28} color="#fff" />
+          </LinearGradient>
+          <Text style={styles.brandName}>Vitals Fusion</Text>
+        </Animated.View>
 
-        <View style={styles.form}>
-          {/* Full Name */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Full Name</Text>
-            <TextInput
-              style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
-              placeholder="Your full name"
-              placeholderTextColor={themeColors.muted}
-              value={fullName}
-              onChangeText={setFullName}
-            />
+        {/* Card */}
+        <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.card}>
+          <Text style={styles.cardTitle}>Create account</Text>
+          <Text style={styles.cardSub}>Join your healthcare network</Text>
+
+          {/* Role selector */}
+          <View style={styles.roleRow}>
+            {(['patient', 'doctor'] as Role[]).map(r => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.roleBtn, role === r && styles.roleBtnActive]}
+                onPress={() => setRole(r)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons
+                  name={r === 'patient' ? 'personal-injury' : 'medical-services'}
+                  size={16}
+                  color={role === r ? '#fff' : 'rgba(255,255,255,0.4)'}
+                />
+                <Text style={[styles.roleBtnText, role === r && styles.roleBtnTextActive]}>
+                  {r === 'patient' ? 'Patient' : 'Doctor'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {/* Doctor Specialization */}
-          {role === 'doctor' && (
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: themeColors.text }]}>Specialization</Text>
-              <TextInput
-                style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
-                placeholder="e.g. General Practitioner, Cardiologist"
-                placeholderTextColor={themeColors.muted}
-                value={specialization}
-                onChangeText={setSpecialization}
-              />
+          {/* Error */}
+          {error ? (
+            <View style={styles.errorBanner}>
+              <MaterialIcons name="error-outline" size={15} color="#FCA5A5" />
+              <Text style={styles.errorText}>{error}</Text>
             </View>
+          ) : null}
+
+          {/* Fields */}
+          <Field icon="person" placeholder="Full name" value={fullName} onChangeText={setFullName} />
+
+          {role === 'doctor' && (
+            <Field
+              icon="local-hospital"
+              placeholder="Specialization (e.g. Cardiologist)"
+              value={specialization}
+              onChangeText={setSpecialization}
+            />
           )}
 
-          {/* Email */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Email</Text>
-            <TextInput
-              style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
-              placeholder="name@example.com"
-              placeholderTextColor={themeColors.muted}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
+          <Field
+            icon="email"
+            placeholder="Email address"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
 
-          {/* Password */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Password</Text>
-            <TextInput
-              style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
-              placeholder="Min. 6 characters"
-              placeholderTextColor={themeColors.muted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
+          <Field
+            icon="lock"
+            placeholder="Password (min. 6 characters)"
+            value={password}
+            onChangeText={setPassword}
+            secure={!showPassword}
+            showToggle={showPassword}
+            onToggle={() => setShowPassword(p => !p)}
+            autoCapitalize="none"
+          />
 
-          {/* Confirm Password */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Confirm Password</Text>
-            <TextInput
-              style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
-              placeholder="Repeat your password"
-              placeholderTextColor={themeColors.muted}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-          </View>
+          <Field
+            icon="lock-outline"
+            placeholder="Confirm password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secure={!showConfirm}
+            showToggle={showConfirm}
+            onToggle={() => setShowConfirm(p => !p)}
+            autoCapitalize="none"
+          />
 
           {/* Location */}
           <TouchableOpacity
-            style={[styles.locationRow, { backgroundColor: themeColors.card, borderColor: locationColor + '60' }]}
+            style={[
+              styles.locationRow,
+              locationStatus === 'granted' && styles.locationGranted,
+              locationStatus === 'denied' && styles.locationDenied,
+            ]}
             onPress={requestLocation}
             disabled={locationStatus === 'fetching'}
+            activeOpacity={0.8}
           >
             {locationStatus === 'fetching' ? (
-              <ActivityIndicator size="small" color={themeColors.tint} />
+              <ActivityIndicator size="small" color="#6366F1" />
             ) : (
               <MaterialIcons
                 name={locationStatus === 'granted' ? 'location-on' : 'location-off'}
-                size={22}
-                color={locationColor}
+                size={20}
+                color={
+                  locationStatus === 'granted' ? '#10B981' :
+                  locationStatus === 'denied' ? '#EF4444' :
+                  'rgba(255,255,255,0.5)'
+                }
               />
             )}
             <View style={{ flex: 1 }}>
-              <Text style={[styles.locationTitle, { color: themeColors.text }]}>
+              <Text style={styles.locationTitle}>
                 {role === 'doctor' ? 'Clinic Location' : 'Your Location'}
               </Text>
-              <Text style={[styles.locationSub, { color: locationColor }]}>{locationLabel}</Text>
+              <Text style={styles.locationSub}>
+                {locationStatus === 'granted' ? 'Location captured ✓' :
+                 locationStatus === 'denied' ? 'Denied — tap to retry' :
+                 locationStatus === 'fetching' ? 'Getting your location…' :
+                 'Enables nearby doctor matching'}
+              </Text>
             </View>
             {locationStatus !== 'granted' && locationStatus !== 'fetching' && (
-              <Text style={[styles.locationAction, { color: themeColors.tint }]}>Enable</Text>
-            )}
-            {locationStatus === 'granted' && (
-              <MaterialIcons name="check-circle" size={20} color="#10B981" />
+              <Text style={styles.locationCta}>Enable</Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.tint }]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>Get Started</Text>
-            }
+          {/* Submit */}
+          <TouchableOpacity onPress={handleRegister} disabled={loading} activeOpacity={0.85}>
+            <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.btn}>
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <>
+                    <Text style={styles.btnText}>Create Account</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+                  </>
+              }
+            </LinearGradient>
           </TouchableOpacity>
-        </View>
+
+          {/* Login link */}
+          <View style={styles.loginRow}>
+            <Text style={styles.loginText}>Already have an account?</Text>
+            <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
+              <Text style={styles.loginLink}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
 
         <View style={styles.footer}>
-          <Text style={{ color: themeColors.muted }}>Already have an account? </Text>
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity>
-              <Text style={{ color: themeColors.tint, fontWeight: '700' }}>Login</Text>
-            </TouchableOpacity>
-          </Link>
+          <MaterialIcons name="lock" size={12} color="rgba(255,255,255,0.2)" />
+          <Text style={styles.footerText}>Secured with end-to-end encryption</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -244,57 +267,92 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollInner: { padding: Spacing.xl, paddingTop: Spacing.xxl * 2 },
-  header: { marginBottom: Spacing.xl },
-  title: { fontSize: 32, fontWeight: '800', marginBottom: Spacing.xs },
-  subtitle: { fontSize: 16 },
-  roleContainer: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl },
-  roleButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
+  root: { flex: 1, backgroundColor: '#0F0F1A' },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+
+  orb: { position: 'absolute', borderRadius: 999, opacity: 0.10 },
+  orb1: { width: 300, height: 300, backgroundColor: '#6366F1', top: -60, right: -80 },
+  orb2: { width: 220, height: 220, backgroundColor: '#4338CA', bottom: 40, left: -60 },
+
+  brand: { alignItems: 'center', marginBottom: 28, gap: 8 },
+  logoBox: {
+    width: 60, height: 60, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#6366F1', shadowOpacity: 0.5, shadowRadius: 16, elevation: 8,
   },
-  roleText: { fontWeight: '700', fontSize: 15 },
-  form: { gap: Spacing.lg },
-  inputGroup: { gap: Spacing.xs },
-  label: { fontSize: 14, fontWeight: '600' },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
-    fontSize: 16,
+  brandName: { fontSize: 22, fontWeight: '800', color: '#fff' },
+
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 24, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 24, gap: 14,
   },
+  cardTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
+  cardSub: { fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: -6 },
+
+  // Role
+  roleRow: { flexDirection: 'row', gap: 10 },
+  roleBtn: {
+    flex: 1, height: 44, borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  roleBtnActive: {
+    backgroundColor: '#4338CA',
+    borderColor: '#6366F1',
+  },
+  roleBtnText: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+  roleBtnTextActive: { color: '#fff' },
+
+  // Error
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+    borderRadius: 10, padding: 11,
+  },
+  errorText: { color: '#FCA5A5', fontSize: 13, flex: 1 },
+
+  // Inputs
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 13, height: 50, paddingHorizontal: 14, gap: 10,
+  },
+  inputIcon: { width: 20 },
+  input: { color: '#fff', fontSize: 15 },
+  eyeBtn: { padding: 4 },
+
+  // Location
   locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 13, padding: 14,
   },
-  locationTitle: { fontSize: 14, fontWeight: '700' },
-  locationSub: { fontSize: 12, marginTop: 1 },
-  locationAction: { fontSize: 13, fontWeight: '700' },
-  button: {
-    height: 56,
-    borderRadius: BorderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.md,
-    ...Shadows.medium,
+  locationGranted: { borderColor: 'rgba(16,185,129,0.4)', backgroundColor: 'rgba(16,185,129,0.07)' },
+  locationDenied: { borderColor: 'rgba(239,68,68,0.35)', backgroundColor: 'rgba(239,68,68,0.06)' },
+  locationTitle: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  locationSub: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  locationCta: { fontSize: 13, fontWeight: '700', color: '#6366F1' },
+
+  // Button
+  btn: {
+    height: 52, borderRadius: 13,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+    shadowColor: '#6366F1', shadowOpacity: 0.35, shadowRadius: 10, elevation: 5,
   },
-  buttonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: Spacing.xxl,
-    marginBottom: Spacing.xxl,
-  },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // Login link
+  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  loginText: { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
+  loginLink: { fontSize: 13, fontWeight: '700', color: '#6366F1' },
+
+  // Footer
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 24 },
+  footerText: { fontSize: 12, color: 'rgba(255,255,255,0.2)' },
 });

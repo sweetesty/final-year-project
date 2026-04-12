@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-url-polyfill/auto';
 
-// These should ideally be in an .env file
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
@@ -13,11 +13,18 @@ if (!isConfigured) {
   console.log('✅ Supabase initialized with URL:', supabaseUrl.substring(0, 20) + '...');
 }
 
-// Use a valid-looking fallback URL so createClient doesn't throw —
-// all queries will simply fail gracefully when credentials are placeholders.
+// AsyncStorage persists the session across app restarts — users stay logged in
 export const supabase = createClient(
   isConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
-  isConfigured ? supabaseAnonKey : 'placeholder'
+  isConfigured ? supabaseAnonKey : 'placeholder',
+  {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  }
 );
 
 export class DataService {

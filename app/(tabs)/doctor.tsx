@@ -243,9 +243,6 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 ]}
                 onPress={() => setActiveFilter(chip)}
               >
-                {chip === 'Nearby' && (
-                  <MaterialIcons name="near-me" size={13} color={active ? '#fff' : themeColors.muted} />
-                )}
                 <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.muted }]}>{chip}</Text>
               </TouchableOpacity>
             );
@@ -1594,7 +1591,7 @@ const styles = StyleSheet.create({
   },
   // ── PatientDoctorView styles ──────────────────────────────────────────────
   mapContainer: {
-    height: 260,
+    height: Math.round(Dimensions.get('window').height * 0.52),
     position: 'relative',
   },
   mapHeaderOverlay: {
@@ -1727,10 +1724,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,

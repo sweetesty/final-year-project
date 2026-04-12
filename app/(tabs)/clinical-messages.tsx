@@ -1,38 +1,55 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, SectionList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { ChatService } from '@/src/services/ChatService';
+import { DoctorService } from '@/src/services/DoctorService';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 
 export default function ClinicalMessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
-  const { session } = useAuthViewModel();
+  const { session, role } = useAuthViewModel();
   const { t } = useTranslation();
   const router = useRouter();
 
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [connected, setConnected] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadConversations = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
-      const convs = await ChatService.getConversations(session.user.id);
-      setConversations(convs);
+      const userId = session.user.id;
+      const [convs, linkedPatients] = await Promise.all([
+        ChatService.getConversations(userId),
+        // Only doctors have linked patients; patients always see all as connected
+        role === 'doctor' ? DoctorService.getLinkedPatients(userId) : Promise.resolve(null),
+      ]);
+
+      if (role === 'doctor' && linkedPatients !== null) {
+        const linkedIds = new Set(linkedPatients.map((p: any) => p.id));
+        setConnected(convs.filter(c => linkedIds.has(c.partnerId)));
+        setRequests(convs.filter(c => !linkedIds.has(c.partnerId)));
+      } else {
+        // For patients: all conversations are "connected"
+        setConnected(convs);
+        setRequests([]);
+      }
     } catch (e) {
       console.error('[ClinicalMessages] Load error:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session]);
+  }, [session, role]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
   const onRefresh = () => { setRefreshing(true); loadConversations(); };
@@ -53,21 +70,29 @@ export default function ClinicalMessagesScreen() {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const renderConversation = ({ item, index }: { item: any; index: number }) => {
+  const renderConversation = ({ item, index, section }: { item: any; index: number; section: any }) => {
     const online = isOnline(item.partnerLastSeen);
+    const isRequest = section.key === 'requests';
     return (
-      <Animated.View entering={FadeInDown.delay(index * 90).duration(400)}>
+      <Animated.View entering={FadeInDown.delay(index * 70).duration(350)}>
         <TouchableOpacity
-          style={styles.convoCard}
+          style={[styles.convoCard, isRequest && styles.requestCard]}
           onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: item.partnerId, partnerName: item.partnerName } })}
           activeOpacity={0.8}
         >
           {/* Avatar */}
           <View style={styles.avatarWrapper}>
-            <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.avatar}>
-              <Text style={styles.avatarText}>{getInitials(item.partnerName)}</Text>
-            </LinearGradient>
-            {online && <View style={styles.onlineDot} />}
+            {item.partnerAvatarUrl ? (
+              <Image source={{ uri: item.partnerAvatarUrl }} style={styles.avatarImg} contentFit="cover" transition={200} />
+            ) : (
+              <LinearGradient
+                colors={isRequest ? ['#78350F', '#B45309'] : ['#4338CA', '#6366F1']}
+                style={styles.avatar}
+              >
+                <Text style={styles.avatarText}>{getInitials(item.partnerName)}</Text>
+              </LinearGradient>
+            )}
+            {online && !isRequest && <View style={styles.onlineDot} />}
           </View>
 
           {/* Info */}
@@ -77,9 +102,14 @@ export default function ClinicalMessagesScreen() {
               <Text style={styles.timestamp}>{formatTime(item.lastMessageTime)}</Text>
             </View>
             <View style={styles.messageRow}>
-              <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
+              {isRequest && (
+                <MaterialIcons name="person-add" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+              )}
+              <Text style={[styles.lastMessage, isRequest && { color: '#F59E0B' }]} numberOfLines={1}>
+                {isRequest ? 'New message request' : item.lastMessage}
+              </Text>
               {item.unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
+                <View style={[styles.unreadBadge, isRequest && { backgroundColor: '#F59E0B' }]}>
                   <Text style={styles.unreadText}>{item.unreadCount}</Text>
                 </View>
               )}
@@ -92,11 +122,16 @@ export default function ClinicalMessagesScreen() {
     );
   };
 
+  const sections = [
+    ...(connected.length > 0 ? [{ key: 'connected', title: `Connected (${connected.length})`, data: connected }] : []),
+    ...(requests.length > 0 ? [{ key: 'requests', title: `Requests (${requests.length})`, data: requests }] : []),
+  ];
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Premium Header */}
+      {/* Header */}
       <LinearGradient colors={['#1E1B4B', '#312E81', '#4338CA']} style={styles.header}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {[...Array(6)].map((_, i) => (
@@ -118,12 +153,14 @@ export default function ClinicalMessagesScreen() {
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <MaterialIcons name="people" size={18} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.statText}>{conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}</Text>
+            <Text style={styles.statText}>{connected.length} connected</Text>
           </View>
-          <View style={styles.statItem}>
-            <View style={styles.activeDot} />
-            <Text style={styles.statText}>Channel active</Text>
-          </View>
+          {requests.length > 0 && (
+            <View style={styles.statItem}>
+              <View style={[styles.activeDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={styles.statText}>{requests.length} request{requests.length > 1 ? 's' : ''}</Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
 
@@ -133,10 +170,18 @@ export default function ClinicalMessagesScreen() {
           <Text style={styles.loadingText}>{t('doctor.loading_conversations')}</Text>
         </View>
       ) : (
-        <FlatList
-          data={conversations}
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.chatId}
           renderItem={renderConversation}
-          keyExtractor={item => item.id}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {section.key === 'requests' && (
+                <Text style={styles.sectionHint}>Not yet connected</Text>
+              )}
+            </View>
+          )}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />
@@ -253,6 +298,35 @@ const styles = StyleSheet.create({
   patientName: { fontSize: 15, fontWeight: '700', color: '#fff', flex: 1, marginRight: 8 },
   timestamp: { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
   messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestCard: {
+    borderColor: 'rgba(245,158,11,0.25)',
+    backgroundColor: 'rgba(245,158,11,0.06)',
+  },
+  avatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  sectionHint: {
+    fontSize: 11,
+    color: '#F59E0B',
+    fontWeight: '600',
+  },
   channelBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lastMessage: { fontSize: 13, color: 'rgba(255,255,255,0.4)', flex: 1 },
   unreadBadge: {

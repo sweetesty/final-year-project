@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '@/src/services/SupabaseService';
 
 export default function ClinicalProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -25,15 +28,34 @@ export default function ClinicalProfileScreen() {
   const avatarKey = userId ? `user_avatar_uri_${userId}` : null;
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  // Load saved avatar for this specific user on mount
+  // Load saved avatar — prefer remote URL from Supabase, fall back to local cache
   React.useEffect(() => {
-    if (!avatarKey) return;
-    AsyncStorage.getItem(avatarKey).then(uri => { if (uri) setAvatarUri(uri); });
-  }, [avatarKey]);
+    if (!userId) return;
+    const load = async () => {
+      // First check Supabase for a persisted URL
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', userId)
+        .single();
+      if (data?.avatar_url) {
+        setAvatarUri(data.avatar_url);
+        if (avatarKey) await AsyncStorage.setItem(avatarKey, data.avatar_url);
+        return;
+      }
+      // Fall back to local cache
+      if (avatarKey) {
+        const local = await AsyncStorage.getItem(avatarKey);
+        if (local) setAvatarUri(local);
+      }
+    };
+    load();
+  }, [userId]);
 
   const handlePickImage = async () => {
-    if (!avatarKey) return;
+    if (!userId) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please allow access to your photo library to change your profile picture.');
@@ -43,12 +65,33 @@ export default function ClinicalProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.7,
     });
     if (!result.canceled && result.assets[0]) {
       const uri = result.assets[0].uri;
-      setAvatarUri(uri);
-      await AsyncStorage.setItem(avatarKey, uri);
+      setAvatarUri(uri); // optimistic local update
+      setUploadingAvatar(true);
+      try {
+        const ext = uri.split('.').pop() ?? 'jpg';
+        const fileName = `${userId}.${ext}`;
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        const arrayBuffer = decode(base64);
+        const { error: upErr } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: true });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+        // Bust cache with timestamp so the image always refreshes
+        const bustedUrl = `${publicUrl}?t=${Date.now()}`;
+        setAvatarUri(bustedUrl);
+        await supabase.from('profiles').update({ avatar_url: bustedUrl }).eq('id', userId);
+        if (avatarKey) await AsyncStorage.setItem(avatarKey, bustedUrl);
+      } catch (e) {
+        console.error('[Profile] Avatar upload error:', e);
+        Alert.alert('Upload failed', 'Could not save your profile picture. Please try again.');
+      } finally {
+        setUploadingAvatar(false);
+      }
     }
   };
 
@@ -87,12 +130,17 @@ export default function ClinicalProfileScreen() {
       <Stack.Screen options={{ title: isDoctor ? 'Clinical Profile' : 'Personal Profile', headerShown: true }} />
       
       <LinearGradient colors={[themeColors.tint + '20', 'transparent']} style={styles.header}>
-        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage} activeOpacity={0.85} disabled={uploadingAvatar}>
           {avatarUri ? (
             <Image source={{ uri: avatarUri }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: themeColors.tint + '22' }]}>
               <MaterialIcons name="person" size={48} color={themeColors.tint} />
+            </View>
+          )}
+          {uploadingAvatar && (
+            <View style={[StyleSheet.absoluteFill, { borderRadius: 60, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }]}>
+              <ActivityIndicator color="#fff" />
             </View>
           )}
           {/* Edit camera badge */}

@@ -8,7 +8,7 @@ const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 // Orpheus voices: tara, leah, jess, leo, dan, mia, zac, zoe
 // "tara" is warm and natural — good for a health companion
 const GROQ_VOICE = 'tara';
-const GROQ_TTS_MODEL = 'playai-tts';
+const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english';
 
 let _sound: Audio.Sound | null = null;
 

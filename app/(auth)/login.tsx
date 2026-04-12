@@ -281,7 +281,7 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/signup')} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/register')} activeOpacity={0.8}>
             <MaterialIcons name="person-add" size={16} color="rgba(255,255,255,0.55)" />
             <Text style={styles.outlineBtnText}>Create account</Text>
           </TouchableOpacity>

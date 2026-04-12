@@ -3,25 +3,21 @@ import * as Speech from 'expo-speech';
 import { documentDirectory, getInfoAsync, makeDirectoryAsync, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { encode } from 'base64-arraybuffer';
 
-// ElevenLabs voice IDs — "Rachel" is calm, warm, natural (great for health apps)
-const VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel
+const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 
-// Language → ElevenLabs model. Multilingual v2 handles Yoruba/Igbo/Hausa better.
-const MULTILINGUAL_LANGS = ['yo', 'ig', 'ha'];
-
-const EL_API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY ?? '';
+// Orpheus voices: tara, leah, jess, leo, dan, mia, zac, zoe
+// "tara" is warm and natural — good for a health companion
+const GROQ_VOICE = 'tara';
+const GROQ_TTS_MODEL = 'playai-tts';
 
 let _sound: Audio.Sound | null = null;
 
-/**
- * Creates a stable filename for a given text and language.
- * Used to avoid re-downloading the same audio (Saving Credits!).
- */
-function _getCacheKey(text: string, lng: string): string {
-  // Simple alphanumeric hash for filename safety
+function _getCacheKey(text: string, voice: string): string {
   const clean = text.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 30);
-  const hash = text.length + text.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
-  return `el_${lng}_${clean}_${Math.abs(hash)}.mp3`;
+  const hash = Math.abs(
+    text.length + text.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0)
+  );
+  return `groq_${voice}_${clean}_${hash}.wav`;
 }
 
 async function _stopCurrent() {
@@ -34,74 +30,55 @@ async function _stopCurrent() {
   }
 }
 
-async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
-  if (!EL_API_KEY || EL_API_KEY === 'her_key_here') {
-    return false;
-  }
+async function _speakGroq(text: string): Promise<boolean> {
+  if (!GROQ_API_KEY) return false;
 
   try {
-    const cacheKey = _getCacheKey(text, lng);
-    const cacheUri = documentDirectory + 'audio_cache/' + cacheKey;
+    const cacheKey = _getCacheKey(text, GROQ_VOICE);
+    const cacheDir = documentDirectory + 'groq_tts_cache/';
+    const cacheUri = cacheDir + cacheKey;
 
-    // 1. Ensure cache directory exists
-    const dirInfo = await getInfoAsync(documentDirectory + 'audio_cache/');
+    // Ensure cache directory exists
+    const dirInfo = await getInfoAsync(cacheDir);
     if (!dirInfo.exists) {
-      await makeDirectoryAsync(documentDirectory + 'audio_cache/', { intermediates: true });
+      await makeDirectoryAsync(cacheDir, { intermediates: true });
     }
 
-    // 2. Check if we already have this audio saved (Credit Saver!)
+    // Use cached audio if available
     const cacheInfo = await getInfoAsync(cacheUri);
-    let playUri = cacheUri;
-
-    if (cacheInfo.exists) {
-      console.log('[SpeechService] Using Cached Local Audio (Credit Saved!):', cacheKey);
-    } else {
-      console.log('[SpeechService] Generating New ElevenLabs Audio...');
-      const isMultilingual = MULTILINGUAL_LANGS.some(l => lng.startsWith(l));
-      const modelId = isMultilingual ? 'eleven_multilingual_v2' : 'eleven_turbo_v2_5';
-
-      const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
-        {
-          method: 'POST',
-          headers: {
-            'xi-api-key': EL_API_KEY,
-            'Content-Type': 'application/json',
-            Accept: 'audio/mpeg',
-          },
-          body: JSON.stringify({
-            text,
-            model_id: modelId,
-            voice_settings: {
-              stability: 0.55,
-              similarity_boost: 0.80,
-              style: 0.20,
-              use_speaker_boost: true,
-            },
-          }),
-        }
-      );
+    if (!cacheInfo.exists) {
+      console.log('[SpeechService] Generating Groq TTS audio...');
+      const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: GROQ_TTS_MODEL,
+          input: text,
+          voice: GROQ_VOICE,
+          response_format: 'wav',
+        }),
+      });
 
       if (!response.ok) {
-        console.warn('[SpeechService] ElevenLabs API error:', response.status);
+        console.warn('[SpeechService] Groq TTS error:', response.status, await response.text());
         return false;
       }
 
       const arrayBuffer = await response.arrayBuffer();
       const base64 = encode(arrayBuffer);
-      await writeAsStringAsync(cacheUri, base64, {
-        encoding: EncodingType.Base64,
-      });
+      await writeAsStringAsync(cacheUri, base64, { encoding: EncodingType.Base64 });
+      console.log('[SpeechService] Groq TTS audio saved to cache.');
+    } else {
+      console.log('[SpeechService] Using cached Groq TTS audio.');
     }
 
-    // 3. Play the audio (either freshly downloaded or cached)
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-    });
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
 
     const { sound } = await Audio.Sound.createAsync(
-      { uri: playUri },
+      { uri: cacheUri },
       { shouldPlay: true, volume: 1.0 }
     );
     _sound = sound;
@@ -115,31 +92,30 @@ async function _speakElevenLabs(text: string, lng: string): Promise<boolean> {
 
     return true;
   } catch (e) {
-    console.warn('[SpeechService] ElevenLabs failed, falling back:', e);
+    console.warn('[SpeechService] Groq TTS failed, falling back to native:', e);
     return false;
   }
 }
 
 function _fallbackSpeak(text: string, lng?: string) {
-  console.log('[SpeechService] Playing Native Robot Voice (Fallback)');
+  console.log('[SpeechService] Using native TTS fallback.');
   let languageCode = 'en-US';
   const clean = lng?.toLowerCase() ?? 'en';
   if (clean.startsWith('yo')) languageCode = 'yo-NG';
   else if (clean.startsWith('ig')) languageCode = 'ig-NG';
   else if (clean.startsWith('ha')) languageCode = 'ha-NG';
 
-  Speech.speak(text, { language: languageCode, rate: 0.88, pitch: 1.0, volume: 1.0 });
+  Speech.speak(text, { language: languageCode, rate: 0.88, pitch: 1.05, volume: 1.0 });
 }
 
 export class SpeechService {
   static async speak(text: string, lng?: string) {
     if (!text) return;
-
     try {
       await _stopCurrent();
-      await Speech.stop();
+      Speech.stop();
 
-      const success = await _speakElevenLabs(text, lng ?? 'en');
+      const success = await _speakGroq(text);
       if (!success) {
         _fallbackSpeak(text, lng);
       }
@@ -152,7 +128,7 @@ export class SpeechService {
   static async stop() {
     try {
       await _stopCurrent();
-      await Speech.stop();
+      Speech.stop();
     } catch (e) {
       console.warn('[SpeechService] stop() failed:', e);
     }

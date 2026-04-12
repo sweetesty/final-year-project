@@ -85,8 +85,8 @@ export default function TabLayout() {
         name="ai-chat"
         options={{
           title: t('tabs.ai_chat'),
-          tabBarButton: () => null, // Hidden from tab bar — accessed via FAB
-          tabBarStyle: { display: 'none' },
+          tabBarButton: () => null,
+          tabBarItemStyle: { display: 'none', width: 0 },
         }}
       />
 

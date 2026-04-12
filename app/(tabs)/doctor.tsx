@@ -498,70 +498,116 @@ export default function DoctorDashboard() {
 
   // ─── Patient List View (default) ────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <Stack.Screen options={{ title: 'Clinical Panel', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <View style={styles.darkContainer}>
+      <Stack.Screen options={{ headerShown: false }} />
 
-        {/* Link Another Patient */}
+      {/* Premium Header */}
+      <LinearGradient colors={['#1E1B4B', '#312E81', '#4338CA']} style={styles.panelHeader}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {[...Array(6)].map((_, i) => (
+            <View key={i} style={[styles.panelGridLine, { top: i * 28 }]} />
+          ))}
+        </View>
+        <View style={styles.panelHeaderTop}>
+          <View>
+            <Text style={styles.panelHeaderLabel}>CLINICAL MONITORING</Text>
+            <Text style={styles.panelHeaderTitle}>{t('doctor.panel_title')}</Text>
+          </View>
+          <View style={styles.panelLiveChip}>
+            <View style={styles.panelLiveDot} />
+            <Text style={styles.panelLiveText}>LIVE</Text>
+          </View>
+        </View>
+        <View style={styles.panelStatsBar}>
+          <View style={styles.panelStatItem}>
+            <Text style={styles.panelStatNum}>{linkedPatients.length}</Text>
+            <Text style={styles.panelStatLabel}>{t('doctor.active_patients')}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <ScrollView
+        contentContainerStyle={styles.darkScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Link Another Patient Banner */}
         <TouchableOpacity
-          style={[styles.linkBanner, { backgroundColor: themeColors.tint + '12', borderColor: themeColors.tint + '40' }]}
+          style={styles.linkBannerDark}
           onPress={() => setShowLinkForm(!showLinkForm)}
           activeOpacity={0.8}
         >
-          <MaterialIcons name="person-add" size={20} color={themeColors.tint} />
-          <Text style={{ flex: 1, color: themeColors.tint, fontWeight: '700', marginLeft: 8 }}>Link Another Patient</Text>
-          <MaterialIcons name={showLinkForm ? 'expand-less' : 'expand-more'} size={20} color={themeColors.tint} />
+          <View style={styles.linkBannerIcon}>
+            <MaterialIcons name="person-add" size={18} color="#818CF8" />
+          </View>
+          <Text style={styles.linkBannerText}>Link Another Patient</Text>
+          <MaterialIcons name={showLinkForm ? 'expand-less' : 'expand-more'} size={20} color="#818CF8" />
         </TouchableOpacity>
 
         {showLinkForm && (
-          <View style={[styles.linkFormInline, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
-            <Text style={{ color: themeColors.muted, fontSize: 13, marginBottom: 8 }}>Enter the 6-digit code from the patient's home screen</Text>
+          <View style={styles.linkFormDark}>
+            <Text style={styles.linkFormHint}>Enter the 6-digit code from the patient's home screen</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: themeColors.background, color: themeColors.text, borderColor: themeColors.border }]}
+              style={styles.darkInput}
               placeholder="Enter Patient Code"
-              placeholderTextColor={themeColors.muted}
+              placeholderTextColor="rgba(255,255,255,0.3)"
               value={linkCode}
               onChangeText={setLinkCode}
               keyboardType="number-pad"
               maxLength={6}
             />
             <TouchableOpacity
-              style={[styles.linkButton, { backgroundColor: themeColors.tint, marginTop: 10 }]}
+              style={styles.linkBtnDark}
               onPress={async () => { await handleLinkPatient(); setShowLinkForm(false); }}
               disabled={linking}
             >
-              {linking ? <ActivityIndicator color="#fff" /> : <Text style={styles.linkButtonText}>Link Patient</Text>}
+              <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.linkBtnGradient}>
+                {linking ? <ActivityIndicator color="#fff" /> : (
+                  <>
+                    <MaterialIcons name="link" size={18} color="#fff" />
+                    <Text style={styles.linkBtnText}>Link Patient</Text>
+                  </>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Patient List */}
         {linkedPatients.length === 0 ? (
-          <View style={styles.linkContainer}>
-            <Text style={styles.linkEmoji}>👨‍⚕️</Text>
-            <Text style={[styles.linkTitle, { color: themeColors.text }]}>No Linked Patients</Text>
-            <Text style={[styles.linkSubtitle, { color: themeColors.muted }]}>Tap "Link Another Patient" above to begin clinical monitoring.</Text>
+          <View style={styles.darkEmptyContainer}>
+            <View style={styles.darkEmptyIcon}>
+              <MaterialIcons name="people-outline" size={40} color="rgba(99,102,241,0.6)" />
+            </View>
+            <Text style={styles.darkEmptyTitle}>No Linked Patients</Text>
+            <Text style={styles.darkEmptySubtitle}>
+              Tap "Link Another Patient" above to begin clinical monitoring.
+            </Text>
           </View>
         ) : (
           <>
-            <Text style={[styles.sectionTitle, { color: themeColors.text, paddingHorizontal: 4, marginBottom: 8 }]}>
-              Your Patients ({linkedPatients.length})
+            <Text style={styles.darkSectionLabel}>
+              YOUR PATIENTS ({linkedPatients.length})
             </Text>
-            {linkedPatients.map((patient) => (
+            {linkedPatients.map((patient, index) => (
               <TouchableOpacity
                 key={patient.id}
-                style={[styles.patientListCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+                style={styles.darkPatientCard}
                 onPress={() => { setSelectedPatient(patient); setHealthSummary(null); }}
                 activeOpacity={0.8}
               >
-                <View style={[styles.patientListAvatar, { backgroundColor: themeColors.tint + '20' }]}>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: themeColors.tint }}>{patient.full_name.charAt(0)}</Text>
-                </View>
+                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.darkPatientAvatar}>
+                  <Text style={styles.darkPatientAvatarText}>{patient.full_name.charAt(0)}</Text>
+                </LinearGradient>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: themeColors.text }}>{patient.full_name}</Text>
-                  <Text style={{ fontSize: 12, color: themeColors.muted, marginTop: 2 }}>Tap to view clinical profile →</Text>
+                  <Text style={styles.darkPatientName}>{patient.full_name}</Text>
+                  <View style={styles.darkPatientStatus}>
+                    <View style={styles.darkStatusDot} />
+                    <Text style={styles.darkPatientSub}>Active monitoring</Text>
+                  </View>
                 </View>
-                <MaterialIcons name="chevron-right" size={24} color={themeColors.muted} />
+                <View style={styles.darkPatientArrow}>
+                  <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.4)" />
+                </View>
               </TouchableOpacity>
             ))}
           </>
@@ -572,16 +618,245 @@ export default function DoctorDashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1 
+  container: {
+    flex: 1
   },
-  centered: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  darkContainer: {
+    flex: 1,
+    backgroundColor: '#0F0F1A',
   },
-  scrollContent: { 
-    padding: Spacing.lg 
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  scrollContent: {
+    padding: Spacing.lg
+  },
+  darkScrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  // Premium Panel Header
+  panelHeader: {
+    paddingTop: 56,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    overflow: 'hidden',
+  },
+  panelGridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  panelHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  panelHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  panelHeaderTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  panelLiveChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10B98115',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  panelLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  panelLiveText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  panelStatsBar: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    padding: 14,
+  },
+  panelStatItem: { flex: 1 },
+  panelStatNum: { fontSize: 28, fontWeight: '800', color: '#fff' },
+  panelStatLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600', marginTop: 2 },
+
+  // Dark link banner
+  linkBannerDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(99,102,241,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.35)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+  },
+  linkBannerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(99,102,241,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  linkBannerText: {
+    flex: 1,
+    color: '#818CF8',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  linkFormDark: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  linkFormHint: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 13,
+  },
+  darkInput: {
+    height: 60,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  linkBtnDark: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  linkBtnGradient: {
+    height: 52,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  linkBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  // Dark patient cards
+  darkSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 2,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  darkPatientCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    gap: 12,
+  },
+  darkPatientAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  darkPatientAvatarText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  darkPatientName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  darkPatientStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  darkStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  darkPatientSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '500',
+  },
+  darkPatientArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Dark empty state
+  darkEmptyContainer: {
+    alignItems: 'center',
+    paddingTop: 60,
+    gap: 12,
+  },
+  darkEmptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(99,102,241,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  darkEmptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  darkEmptySubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
   linkContainer: { 
     flex: 1, 

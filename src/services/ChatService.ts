@@ -100,6 +100,65 @@ export class ChatService {
   }
 
   /**
+   * Returns all conversations for a user: one entry per unique chat partner,
+   * with the latest message text/time and unread count.
+   */
+  static async getConversations(userId: string) {
+    // Fetch all messages where the user is sender or receiver, ordered newest first
+    const { data, error } = await supabase
+      .from('direct_messages')
+      .select('chat_id, sender_id, receiver_id, message_text, timestamp, read_at')
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+      .order('timestamp', { ascending: false });
+
+    if (error) throw error;
+
+    // Collapse into one entry per chat_id (first occurrence = latest message)
+    const seen = new Map<string, any>();
+    for (const msg of data ?? []) {
+      if (!seen.has(msg.chat_id)) seen.set(msg.chat_id, msg);
+    }
+
+    // Count unread per chat (messages sent TO me with no read_at)
+    const unreadCounts = new Map<string, number>();
+    for (const msg of data ?? []) {
+      if (msg.receiver_id === userId && !msg.read_at) {
+        unreadCounts.set(msg.chat_id, (unreadCounts.get(msg.chat_id) ?? 0) + 1);
+      }
+    }
+
+    // Resolve partner profile for each chat
+    const partnerIds = Array.from(seen.values()).map(msg =>
+      msg.sender_id === userId ? msg.receiver_id : msg.sender_id
+    );
+
+    if (partnerIds.length === 0) return [];
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, last_seen, avatar_url')
+      .in('id', partnerIds);
+
+    const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+
+    return Array.from(seen.values()).map(msg => {
+      const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+      const partner = profileMap.get(partnerId);
+      return {
+        chatId: msg.chat_id,
+        partnerId,
+        partnerName: partner?.full_name ?? 'Unknown',
+        partnerRole: partner?.role ?? 'patient',
+        partnerLastSeen: partner?.last_seen ?? null,
+        partnerAvatarUrl: partner?.avatar_url ?? null,
+        lastMessage: msg.message_text,
+        lastMessageTime: msg.timestamp,
+        unreadCount: unreadCounts.get(msg.chat_id) ?? 0,
+      };
+    });
+  }
+
+  /**
    * Marks all unread messages from a partner as read.
    */
   static async markAsRead(chatId: string, receiverId: string) {

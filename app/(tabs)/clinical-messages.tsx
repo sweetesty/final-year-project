@@ -5,7 +5,6 @@ import { Stack, useRouter } from 'expo-router';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
-import { DoctorService } from '@/src/services/DoctorService';
 import { ChatService } from '@/src/services/ChatService';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -25,14 +24,7 @@ export default function ClinicalMessagesScreen() {
   const loadConversations = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
-      const patients = await DoctorService.getLinkedPatients(session.user.id);
-      const convs = patients.map(p => ({
-        id: p.id,
-        full_name: p.full_name,
-        lastMessage: 'Clinical channel active',
-        lastMessageTime: 'Now',
-        unreadCount: 0,
-      }));
+      const convs = await ChatService.getConversations(session.user.id);
       setConversations(convs);
     } catch (e) {
       console.error('[ClinicalMessages] Load error:', e);
@@ -48,44 +40,57 @@ export default function ClinicalMessagesScreen() {
   const getInitials = (name: string) =>
     name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 
-  const renderConversation = ({ item, index }: { item: any; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 90).duration(400)}>
-      <TouchableOpacity
-        style={styles.convoCard}
-        onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: item.id, partnerName: item.full_name } })}
-        activeOpacity={0.8}
-      >
-        {/* Avatar */}
-        <View style={styles.avatarWrapper}>
-          <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(item.full_name)}</Text>
-          </LinearGradient>
-          <View style={styles.onlineDot} />
-        </View>
+  const isOnline = (lastSeen: string | null) =>
+    lastSeen ? Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000 : false;
 
-        {/* Info */}
-        <View style={styles.convoInfo}>
-          <View style={styles.convoHeaderRow}>
-            <Text style={styles.patientName} numberOfLines={1}>{item.full_name}</Text>
-            <Text style={styles.timestamp}>{item.lastMessageTime}</Text>
+  const formatTime = (ts: string | null) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const renderConversation = ({ item, index }: { item: any; index: number }) => {
+    const online = isOnline(item.partnerLastSeen);
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 90).duration(400)}>
+        <TouchableOpacity
+          style={styles.convoCard}
+          onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: item.partnerId, partnerName: item.partnerName } })}
+          activeOpacity={0.8}
+        >
+          {/* Avatar */}
+          <View style={styles.avatarWrapper}>
+            <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(item.partnerName)}</Text>
+            </LinearGradient>
+            {online && <View style={styles.onlineDot} />}
           </View>
-          <View style={styles.messageRow}>
-            <View style={styles.channelBadge}>
-              <MaterialIcons name="lock" size={10} color="rgba(99,102,241,0.8)" />
-              <Text style={styles.lastMessage}>{item.lastMessage}</Text>
+
+          {/* Info */}
+          <View style={styles.convoInfo}>
+            <View style={styles.convoHeaderRow}>
+              <Text style={styles.patientName} numberOfLines={1}>{item.partnerName}</Text>
+              <Text style={styles.timestamp}>{formatTime(item.lastMessageTime)}</Text>
             </View>
-            {item.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unreadCount}</Text>
-              </View>
-            )}
+            <View style={styles.messageRow}>
+              <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
+              {item.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
-        <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.2)" />
-      </TouchableOpacity>
-    </Animated.View>
-  );
+          <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.2)" />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -113,7 +118,7 @@ export default function ClinicalMessagesScreen() {
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <MaterialIcons name="people" size={18} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.statText}>{conversations.length} patients</Text>
+            <Text style={styles.statText}>{conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}</Text>
           </View>
           <View style={styles.statItem}>
             <View style={styles.activeDot} />

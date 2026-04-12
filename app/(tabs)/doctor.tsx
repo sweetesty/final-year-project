@@ -1612,7 +1612,7 @@ const styles = StyleSheet.create({
   },
   // ── PatientDoctorView styles ──────────────────────────────────────────────
   mapContainer: {
-    height: Math.round(Dimensions.get('window').height * 0.52),
+    height: Math.round(Dimensions.get('window').height * 0.38),
     position: 'relative',
   },
   mapHeaderOverlay: {

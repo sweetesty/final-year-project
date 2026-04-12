@@ -15,6 +15,7 @@ import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel'
 import { AnalyticsService } from '@/src/services/AnalyticsService';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Image } from 'expo-image';
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 ]}
                 onPress={() => setActiveFilter(chip)}
               >
-                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.text }]}>{chip}</Text>
+                <Text style={[styles.filterChipText, { color: active ? '#fff' : themeColors.text }]} numberOfLines={1}>{chip}</Text>
               </TouchableOpacity>
             );
           })}
@@ -277,10 +278,19 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 onPress={() => focusDoctor(doc)}
                 activeOpacity={0.85}
               >
-                {/* Avatar */}
-                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.docAvatar}>
-                  <Text style={styles.docAvatarText}>{doc.full_name.charAt(0)}</Text>
-                </LinearGradient>
+                {/* Avatar — show profile image if available, else gradient initials */}
+                {doc.avatar_url ? (
+                  <Image
+                    source={{ uri: doc.avatar_url }}
+                    style={styles.docAvatarImg}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ) : (
+                  <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.docAvatar}>
+                    <Text style={styles.docAvatarText}>{doc.full_name.charAt(0)}</Text>
+                  </LinearGradient>
+                )}
 
                 {/* Info */}
                 <View style={{ flex: 1 }}>
@@ -1728,13 +1738,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
+    flexShrink: 0,
+    flexGrow: 0,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
+    flexShrink: 0,
   },
   resultsLabel: {
     fontSize: 12,
@@ -1753,6 +1766,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 10,
     ...Shadows.light,
+  },
+  docAvatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   docAvatar: {
     width: 48,

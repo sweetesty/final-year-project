@@ -307,6 +307,17 @@ export default function HomeScreen() {
     <View style={[styles.root, { backgroundColor: isDark ? '#080C18' : '#F4F7FE' }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
+      {/* ── AI Companion FAB ─────────────────────────────────────────── */}
+      {role !== 'doctor' && (
+        <Animated.View entering={FadeIn.delay(600).duration(400)} style={styles.fab} pointerEvents="box-none">
+          <TouchableOpacity onPress={() => router.push('/ai-chat')} activeOpacity={0.85}>
+            <LinearGradient colors={['#4F46E5', '#6D28D9']} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <MaterialIcons name="smart-toy" size={26} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {/* ── Fall Alert Sheet — PATIENTS ONLY (slides up from bottom) ──── */}
       {role !== 'doctor' && (
         <Animated.View style={[styles.fallSheet, alertStyle]}>
@@ -708,6 +719,10 @@ const styles = StyleSheet.create({
   // Insight
   insightStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
   insightText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '500' },
+
+  // FAB
+  fab: { position: 'absolute', bottom: 88, right: 20, zIndex: 100 },
+  fabGradient: { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center', shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
 
   // Fall alert
   fallSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 999, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },

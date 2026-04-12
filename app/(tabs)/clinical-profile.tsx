@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const AVATAR_KEY = 'user_avatar_uri';
 
 export default function ClinicalProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -14,11 +18,36 @@ export default function ClinicalProfileScreen() {
   const { session, signOut, role } = useAuthViewModel();
   const { t } = useTranslation();
   const router = useRouter();
-  
-  const isDoctor = role === 'doctor';
 
+  const isDoctor = role === 'doctor';
   const userName = session?.user?.user_metadata?.full_name || (isDoctor ? 'Medical Officer' : 'Patient');
   const userEmail = session?.user?.email || (isDoctor ? 'doctor@hospital.com' : 'patient@vitalsfusion.com');
+
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  // Load saved avatar on mount
+  React.useEffect(() => {
+    AsyncStorage.getItem(AVATAR_KEY).then(uri => { if (uri) setAvatarUri(uri); });
+  }, []);
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library to change your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].uri;
+      setAvatarUri(uri);
+      await AsyncStorage.setItem(AVATAR_KEY, uri);
+    }
+  };
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -55,19 +84,24 @@ export default function ClinicalProfileScreen() {
       <Stack.Screen options={{ title: isDoctor ? 'Clinical Profile' : 'Personal Profile', headerShown: true }} />
       
       <LinearGradient colors={[themeColors.tint + '20', 'transparent']} style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <Image 
-            source={{ uri: isDoctor 
-              ? 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=200&auto=format&fit=crop' 
-              : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop' 
-            }} 
-            style={styles.avatar} 
-          />
+        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage} activeOpacity={0.85}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: themeColors.tint + '22' }]}>
+              <MaterialIcons name="person" size={48} color={themeColors.tint} />
+            </View>
+          )}
+          {/* Edit camera badge */}
+          <View style={[styles.editBadge, { backgroundColor: themeColors.tint }]}>
+            <MaterialIcons name="camera-alt" size={13} color="#fff" />
+          </View>
           <View style={[styles.badge, { backgroundColor: isDoctor ? themeColors.tint : '#10B981' }]}>
             <MaterialIcons name={isDoctor ? "verified-user" : "person"} size={14} color="#fff" />
           </View>
-        </View>
+        </TouchableOpacity>
         <Text style={[styles.name, { color: themeColors.text }]}>{userName}</Text>
+        <Text style={[styles.editHint, { color: themeColors.muted }]}>Tap photo to change</Text>
         <Text style={[styles.specialty, { color: themeColors.muted }]}>
           {isDoctor ? t('doctor.specialist') : 'Verified User'}
         </Text>
@@ -146,6 +180,27 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     borderWidth: 3,
+    borderColor: '#fff',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editHint: {
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  editBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
     borderColor: '#fff',
   },
   badge: {

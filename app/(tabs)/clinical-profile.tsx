@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert, Act
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -74,7 +74,7 @@ export default function ClinicalProfileScreen() {
       try {
         const ext = uri.split('.').pop() ?? 'jpg';
         const fileName = `${userId}.${ext}`;
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        const base64 = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
         const arrayBuffer = decode(base64);
         const { error: upErr } = await supabase.storage
           .from('avatars')

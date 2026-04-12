@@ -250,6 +250,67 @@ export class DoctorService {
   }
 
   /**
+   * Returns doctors within radiusKm of a given coordinate.
+   * Uses the Haversine formula in SQL (no PostGIS required).
+   */
+  static async getNearbyDoctors(latitude: number, longitude: number, radiusKm = 20) {
+    try {
+      // Fetch all doctors with location and filter client-side using Haversine
+      const { data: doctors, error: err } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, specialization, latitude, longitude, last_seen')
+        .or('role.eq.doctor,role.eq.Doctor')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null);
+
+      if (err) throw err;
+
+      const toRad = (deg: number) => (deg * Math.PI) / 180;
+      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+
+      return (doctors || [])
+        .map(d => ({
+          ...d,
+          distanceKm: haversine(latitude, longitude, d.latitude!, d.longitude!),
+        }))
+        .filter(d => d.distanceKm <= radiusKm)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+    } catch (e) {
+      console.error('[DoctorService] Nearby doctors error:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Broadcasts a HELP SIGNAL (bolt) — inserts a fall_event with source='help_signal'
+   * that all nearby/linked doctors will see in their alerts.
+   */
+  static async sendHelpSignal(
+    patientId: string,
+    latitude: number,
+    longitude: number,
+  ) {
+    const { error } = await supabase.from('fall_events').insert({
+      patientid: patientId,
+      latitude,
+      longitude,
+      confirmed: true,
+      source: 'help_signal',
+      status: 'unresolved',
+      timestamp: new Date().toISOString(),
+    });
+    if (error) throw error;
+  }
+
+  /**
    * Fetches all registered doctors in the system.
    */
   static async getAllDoctors() {

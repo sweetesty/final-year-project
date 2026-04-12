@@ -11,6 +11,7 @@ export interface DirectMessage {
   timestamp?: string;
   attachment_url?: string;
   attachment_type?: 'image' | 'video' | 'audio';
+  read_at?: string | null;
 }
 
 export class ChatService {
@@ -96,6 +97,37 @@ export class ChatService {
       console.error('[ChatService] upload error:', e);
       return null;
     }
+  }
+
+  /**
+   * Marks all unread messages from a partner as read.
+   */
+  static async markAsRead(chatId: string, receiverId: string) {
+    await supabase
+      .from('direct_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('chat_id', chatId)
+      .eq('receiver_id', receiverId)
+      .is('read_at', null);
+  }
+
+  /**
+   * Subscribe to read receipt updates (UPDATE events on our sent messages).
+   */
+  static subscribeToReadReceipts(chatId: string, senderId: string, onRead: (ids: string[]) => void) {
+    return supabase
+      .channel(`read_${chatId}_${senderId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `chat_id=eq.${chatId}`,
+      }, (payload: any) => {
+        if (payload.new?.read_at && payload.new?.sender_id === senderId) {
+          onRead([payload.new.id]);
+        }
+      })
+      .subscribe();
   }
 
   /**

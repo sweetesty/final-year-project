@@ -61,7 +61,14 @@ export const useAuthViewModel = () => {
     return () => clearInterval(interval);
   }, [session?.user?.id]);
 
-  const signUp = async (email: string, password: string, fullName: string = '', userRole: 'patient' | 'doctor' = 'patient') => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string = '',
+    userRole: 'patient' | 'doctor' = 'patient',
+    location?: { latitude: number; longitude: number },
+    specialization?: string,
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -70,9 +77,29 @@ export const useAuthViewModel = () => {
       },
     });
     if (error) throw error;
+
     // Profile is created by the DB trigger (handle_new_user).
-    // We do NOT upsert here — auth.uid() is not yet set in the session
-    // so RLS would block the insert.
+    // Save location + specialization immediately after — the trigger runs
+    // server-side so we just update the row once the session settles.
+    if (data.user && (location || specialization)) {
+      const updates: Record<string, any> = {};
+      if (location) {
+        updates.latitude = location.latitude;
+        updates.longitude = location.longitude;
+      }
+      if (specialization) updates.specialization = specialization;
+
+      // Retry a couple of times — the trigger insert may not be committed yet
+      for (let i = 0; i < 3; i++) {
+        await new Promise(r => setTimeout(r, 800));
+        const { error: upErr } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', data.user.id);
+        if (!upErr) break;
+      }
+    }
+
     return data;
   };
 

@@ -27,6 +27,7 @@ export const useAiAssistantViewModel = () => {
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
 
   const getPatientContext = async () => {
     if (!patientId) return "Patient not authenticated.";
@@ -55,7 +56,7 @@ export const useAiAssistantViewModel = () => {
     }
   };
 
-  const sendMessage = useCallback(async (text: string, voiceMode = false) => {
+  const sendMessage = useCallback(async (text: string, forceVoice = false) => {
     if (!text.trim()) return;
 
     const userMsg: Message = {
@@ -70,7 +71,7 @@ export const useAiAssistantViewModel = () => {
 
     const context = await getPatientContext();
     const responseText = await OpenAiService.sendMessage(text, context);
-    
+
     const assistantMsg: Message = {
       id: (Date.now() + 1).toString(),
       text: responseText,
@@ -81,10 +82,11 @@ export const useAiAssistantViewModel = () => {
     setMessages(prev => [...prev, assistantMsg]);
     setIsLoading(false);
 
-    if (voiceMode) {
+    // Speak if voice reply is on globally, or if this specific call forces it (voice note input)
+    if (forceVoice || voiceReplyEnabled) {
       await SpeechService.speak(responseText);
     }
-  }, [patientId]);
+  }, [patientId, voiceReplyEnabled]);
 
   const startVoiceChat = async () => {
     setIsListening(true);
@@ -105,6 +107,8 @@ export const useAiAssistantViewModel = () => {
     messages,
     isLoading,
     isListening,
+    voiceReplyEnabled,
+    setVoiceReplyEnabled,
     sendMessage,
     startVoiceChat,
   };

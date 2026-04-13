@@ -25,7 +25,10 @@ export const useMedicationViewModel = (patientId: string) => {
         ...m,
         isCritical: m.iscritical,
         patientId: m.patientid,
-        createdAt: m.created_at, 
+        createdAt: m.createdat,
+        durationDays: m.duration_days,
+        startDate: m.start_date,
+        endDate: m.end_date,
       }));
       setMedications(mapped);
     }
@@ -53,6 +56,15 @@ export const useMedicationViewModel = (patientId: string) => {
       alert('Patient context not ready. Please wait a moment.');
       return;
     }
+    const startDate = newMed.startDate ?? new Date().toISOString().split('T')[0];
+    const endDate = newMed.durationDays
+      ? (() => {
+          const d = new Date(startDate);
+          d.setDate(d.getDate() + newMed.durationDays! - 1);
+          return d.toISOString().split('T')[0];
+        })()
+      : undefined;
+
     const { data, error } = await supabase
       .from('medications')
       .insert({
@@ -62,7 +74,10 @@ export const useMedicationViewModel = (patientId: string) => {
         iscritical: newMed.isCritical,
         times: newMed.times,
         frequency: newMed.frequency,
-        patientid: patientId 
+        patientid: patientId,
+        duration_days: newMed.durationDays ?? null,
+        start_date: startDate,
+        end_date: endDate ?? null,
       })
       .select()
       .single();
@@ -70,9 +85,40 @@ export const useMedicationViewModel = (patientId: string) => {
     if (error) {
       alert(error.message);
     } else {
-      await NotificationService.scheduleMedicationReminders(data);
+      const mapped = {
+        ...data,
+        isCritical: data.iscritical,
+        patientId: data.patientid,
+        durationDays: data.duration_days,
+        startDate: data.start_date,
+        endDate: data.end_date,
+        createdAt: data.createdat,
+      };
+      await NotificationService.scheduleMedicationReminders(mapped);
       await fetchMedications();
     }
+  };
+
+  const deleteMedication = async (medicationId: string) => {
+    const { error } = await supabase.from('medications').delete().eq('id', medicationId);
+    if (error) { alert(error.message); return; }
+    setMedications(prev => prev.filter(m => m.id !== medicationId));
+  };
+
+  const updateMedication = async (medicationId: string, updates: Partial<NewMedication>) => {
+    const { error } = await supabase
+      .from('medications')
+      .update({
+        name: updates.name,
+        dosage: updates.dosage,
+        instructions: updates.instructions,
+        iscritical: updates.isCritical,
+        times: updates.times,
+        frequency: updates.frequency,
+      })
+      .eq('id', medicationId);
+    if (error) { alert(error.message); return; }
+    await fetchMedications();
   };
 
   const logDose = async (medicationId: string, scheduledTime: string, status: 'taken' | 'skipped') => {
@@ -137,6 +183,8 @@ export const useMedicationViewModel = (patientId: string) => {
     todayLogs,
     loading,
     addMedication,
+    updateMedication,
+    deleteMedication,
     logDose,
     refresh: () => { fetchMedications(); fetchTodayLogs(); },
   };

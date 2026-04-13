@@ -13,6 +13,9 @@ export interface Medication {
   isPrescribed: boolean;
   prescribedBy?: string;
   createdAt: string;
+  durationDays?: number;   // how many days to take it (undefined = indefinite)
+  startDate?: string;      // ISO date string (YYYY-MM-DD)
+  endDate?: string;        // computed: startDate + durationDays - 1
 }
 
 export interface MedicationLog {

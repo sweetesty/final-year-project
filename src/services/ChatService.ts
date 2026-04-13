@@ -1,6 +1,7 @@
 import { supabase } from './SupabaseService';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { NotificationService } from './NotificationService';
 
 export interface DirectMessage {
   id?: string;
@@ -22,15 +23,48 @@ export class ChatService {
     return [id1, id2].sort().join('_');
   }
 
-  static async sendMessage(msg: DirectMessage) {
+  static async sendMessage(msg: DirectMessage, senderName?: string) {
     const { data, error } = await supabase
       .from('direct_messages')
       .insert(msg)
       .select()
       .single();
-    
+
     if (error) throw error;
+
+    // Fire push notification to receiver (non-blocking)
+    this._notifyReceiver(msg, senderName).catch(() => {});
+
     return data;
+  }
+
+  private static async _notifyReceiver(msg: DirectMessage, senderName?: string) {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('push_token, full_name')
+        .eq('id', msg.receiver_id)
+        .single();
+
+      if (!profile?.push_token) return;
+
+      const displayName = senderName || 'Someone';
+      const isMedia = msg.attachment_type === 'image'
+        ? '📸 sent you an image'
+        : msg.attachment_type === 'audio'
+        ? '🎙️ sent you a voice note'
+        : null;
+      const body = isMedia ?? (msg.message_text || '...');
+
+      await NotificationService.sendPushToToken(
+        profile.push_token,
+        `💬 ${displayName}`,
+        body,
+        { chatId: msg.chat_id, partnerId: msg.sender_id, partnerName: displayName },
+      );
+    } catch (e) {
+      console.warn('[ChatService] push notify failed:', e);
+    }
   }
 
   static async getMessages(chatId: string) {

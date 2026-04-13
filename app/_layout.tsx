@@ -73,11 +73,18 @@ export default function RootLayout() {
       setupServices();
 
       const unsubscribe = NotificationService.addNotificationListeners(
-        (notification) => {
-          console.log('Notification Received:', notification);
+        (_notification) => {
+          // In-foreground notifications are shown automatically via setNotificationHandler
         },
         (response) => {
-          console.log('Notification Response:', response);
+          // Tapping a notification navigates to the relevant chat
+          const data = response.notification.request.content.data as any;
+          if (data?.partnerId && data?.partnerName) {
+            router.push({
+              pathname: '/chat-room',
+              params: { partnerId: data.partnerId, partnerName: data.partnerName },
+            });
+          }
         }
       );
 

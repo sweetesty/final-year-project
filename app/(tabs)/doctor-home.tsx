@@ -80,11 +80,11 @@ export default function DoctorHomeScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAcceptAlert = async (alertId: string) => {
+  const handleAcceptAlert = async (alertId: string, patientId: string, patientName: string) => {
     try {
       await DoctorService.acceptAlert(alertId, session!.user.id);
-      Alert.alert('Case Accepted', 'You have been assigned. Contact the patient immediately.');
       load();
+      router.push({ pathname: '/emergency-case', params: { patientId, patientName, alertId } });
     } catch { Alert.alert('Error', 'Could not accept alert.'); }
   };
 
@@ -179,7 +179,7 @@ export default function DoctorHomeScreen() {
                     </View>
                   </View>
                   <View style={styles.emergencyActions}>
-                    <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: '#DC2626' }]} onPress={() => handleAcceptAlert(alert.id)}>
+                    <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: '#DC2626' }]} onPress={() => handleAcceptAlert(alert.id, alert.patientid, alert.profiles?.full_name ?? 'Unknown Patient')}>
                       <MaterialIcons name="check-circle" size={16} color="#fff" />
                       <Text style={styles.emergencyBtnText}>{t('doctor.accept_case')}</Text>
                     </TouchableOpacity>

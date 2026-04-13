@@ -227,7 +227,10 @@ export default function ChatRoomScreen() {
     setInputText('');
     setMessages(prev => [...prev, newMsg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    try { await ChatService.sendMessage(newMsg); } catch (err) { console.error(err); }
+    try {
+      const senderName = session?.user?.user_metadata?.full_name ?? 'Someone';
+      await ChatService.sendMessage(newMsg, senderName);
+    } catch (err) { console.error(err); }
   };
 
   // ── Render message ─────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
@@ -22,6 +22,33 @@ export default function MedicalDetailsScreen() {
     emergencyContactName: '',
     emergencyContactPhone: '',
   });
+  const [loading, setLoading] = useState(false);
+
+  const fetchDetails = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('medical_details')
+      .select('*')
+      .eq('patientid', session.user.id);
+    
+    if (!error && data && data.length > 0) {
+      const d = data[0];
+      setDetails({
+        bloodType: d.bloodtype || '',
+        allergies: d.allergies || '',
+        chronicConditions: d.chronicconditions || '',
+        currentMedications: d.currentmedications || '',
+        emergencyContactName: '', // Handled in emergency-contacts.tsx
+        emergencyContactPhone: '',
+      });
+    }
+    setLoading(false);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
 
   const handleSave = async () => {
     try {
@@ -34,11 +61,12 @@ export default function MedicalDetailsScreen() {
         .from('medical_details')
         .upsert({
           patientid: session.user.id,
-          bloodType: details.bloodType,
+          bloodtype: details.bloodType,
           allergies: details.allergies,
-          chronicConditions: details.chronicConditions,
-          currentMedications: details.currentMedications,
-        });
+          chronicconditions: details.chronicConditions,
+          currentmedications: details.currentMedications,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'patientid' });
 
       if (error) {
         alert('Error saving details: ' + error.message);

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { AppState } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
@@ -12,7 +12,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { NotificationService } from '@/src/services/NotificationService';
-import { DataService } from '@/src/services/SupabaseService';
+import { DataService, supabase } from '@/src/services/SupabaseService';
 import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
 import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 import { LocationService } from '@/src/services/LocationService';
@@ -36,8 +36,11 @@ export default function RootLayout() {
     }
   }, [loading]);
 
+  const rootNavigationState = useRootNavigationState();
+  const isNavReady = !!rootNavigationState?.key;
+
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !isNavReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -46,7 +49,7 @@ export default function RootLayout() {
     } else if (session && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [session, isReady, segments]);
+  }, [session, isReady, isNavReady, segments]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -61,7 +64,13 @@ export default function RootLayout() {
         }
 
         try {
-          await BackgroundMonitorService.register();
+          // Only register background monitoring for Patients
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+          if (profile?.role === 'patient') {
+            await BackgroundMonitorService.register();
+          } else {
+            await BackgroundMonitorService.unregister();
+          }
         } catch (error) {
           console.error('Failed to register background monitor:', error);
         }

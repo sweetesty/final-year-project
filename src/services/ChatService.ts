@@ -134,6 +134,59 @@ export class ChatService {
   }
 
   /**
+   * Upload an image specifically intended for clinical review (wound, pill bottle, etc.)
+   */
+  static async uploadClinicalImage(uri: string, patientId: string, description: string) {
+    try {
+      const ext = uri.split('.').pop() || 'jpg';
+      const fileName = `${patientId}/clinical_${Date.now()}.${ext}`;
+      
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+      const arrayBuffer = decode(base64);
+
+      const { error: storageError } = await supabase.storage
+        .from('clinical-images')
+        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: false });
+
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('clinical-images')
+        .getPublicUrl(fileName);
+
+      // Save record to DB for the gallery
+      const { data, error: dbError } = await supabase
+        .from('clinical_records')
+        .insert({
+          patientid: patientId,
+          image_url: publicUrl,
+          description: description,
+          timestamp: new Date().toISOString(),
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+      return data;
+    } catch (e) {
+      console.error('[ChatService] clinical upload error:', e);
+      return null;
+    }
+  }
+
+  static async getClinicalRecords(patientId: string) {
+    const { data, error } = await supabase
+      .from('clinical_records')
+      .select('*')
+      .eq('patientid', patientId)
+      .order('timestamp', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  }
+
+  /**
    * Returns all conversations for a user: one entry per unique chat partner,
    * with the latest message text/time and unread count.
    */

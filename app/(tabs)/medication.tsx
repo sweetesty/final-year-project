@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
   ActivityIndicator, Modal, TextInput, Alert, Switch,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect, Stack, useRouter, useRootNavigationState } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -33,13 +34,20 @@ export default function MedicationDashboard() {
   const [editForm, setEditForm] = useState({ name: '', dosage: '', instructions: '', isCritical: false });
 
   const patientId = session?.user?.id ?? '';
-  const { medications, todayLogs, loading, logDose, deleteMedication, updateMedication, refresh: refreshMeds } = useMedicationViewModel(patientId);
+  const { 
+    medications, todayLogs, loading, refreshing,
+    logDose, deleteMedication, updateMedication, refresh: refreshMeds 
+  } = useMedicationViewModel(patientId);
 
   useFocusEffect(
     useCallback(() => {
-      if (patientId) refreshMeds();
+      if (patientId) refreshMeds(true); // Silent refresh on focus
     }, [patientId, refreshMeds])
   );
+
+  const onRefresh = useCallback(() => {
+    refreshMeds(true);
+  }, [refreshMeds]);
 
   const handleSpeak = (item: any) => {
     SpeechService.speak(`${item.name}. ${item.dosage}. ${item.instructions}.`, i18n.language);
@@ -63,6 +71,15 @@ export default function MedicationDashboard() {
   };
 
   const handleDelete = (item: any) => {
+    if (item.isPrescribed) {
+      Alert.alert(
+        'Locked Medication',
+        'This is a doctor-prescribed medication. Only your clinical team can remove it from your schedule for your safety.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Delete Medication',
       `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
@@ -100,7 +117,10 @@ export default function MedicationDashboard() {
     med.times.map(time => ({
       ...med,
       scheduledTime: time,
-      status: todayLogs.find(l => l.medicationid === med.id && l.scheduledtime === time)?.status || 'pending',
+      status: todayLogs.find(l => 
+        (l.medicationid === med.id || l.medicationId === med.id) && 
+        (l.scheduledtime === time || l.scheduledTime === time)
+      )?.status || 'pending',
     }))
   ).sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
 
@@ -116,14 +136,21 @@ export default function MedicationDashboard() {
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <Stack.Screen options={{ title: t('med.schedule'), headerShown: true }} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.tint} />
+        }
+      >
         <View style={styles.header}>
           <Text style={[styles.title, { color: themeColors.text }]}>{t('med.schedule')}</Text>
           <Text style={[styles.subtitle, { color: themeColors.muted }]}>{t('home.status')}</Text>
         </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color={themeColors.tint} />
+        {loading && medications.length === 0 ? (
+          <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={themeColors.tint} />
+          </View>
         ) : (
           <View style={styles.listContainer}>
             {todaySchedule.length === 0 ? (
@@ -152,9 +179,15 @@ export default function MedicationDashboard() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
                         <Text style={[styles.timeText, { color: themeColors.tint }]}>{item.scheduledTime}</Text>
                         {item.isPrescribed && (
-                          <View style={[styles.verifiedBadge, { backgroundColor: '#DC2626' }]}>
+                          <View style={[styles.verifiedBadge, { backgroundColor: '#4F46E5' }]}>
                             <MaterialIcons name="local-pharmacy" size={12} color="#fff" />
                             <Text style={styles.verifiedText}>DR. PRESCRIBED</Text>
+                          </View>
+                        )}
+                        {item.isCritical && (
+                          <View style={[styles.verifiedBadge, { backgroundColor: '#DC2626' }]}>
+                            <MaterialIcons name="warning" size={12} color="#fff" />
+                            <Text style={styles.verifiedText}>CRITICAL</Text>
                           </View>
                         )}
                       </View>
@@ -187,6 +220,11 @@ export default function MedicationDashboard() {
                       <Text style={[styles.medDosage, { color: themeColors.muted }]}>
                         {item.dosage} • {item.instructions}
                       </Text>
+                      {item.prescribedBy && (
+                        <Text style={[styles.prescribedByText, { color: themeColors.muted }]}>
+                          Prescribed by Dr. {item.prescribedBy}
+                        </Text>
+                      )}
                       {item.durationDays && item.endDate && (
                         <View style={styles.durationTag}>
                           <MaterialIcons name="event" size={12} color={themeColors.tint} />
@@ -455,9 +493,10 @@ const styles = StyleSheet.create({
 
   verifiedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
   verifiedText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, color: '#fff' },
+  prescribedByText: { fontSize: 11, fontStyle: 'italic', marginTop: 2 },
 
   // Modals
   modalOverlay: {

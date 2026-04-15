@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  ActivityIndicator, Dimensions, Alert, Linking, ScrollView, Vibration,
+  ActivityIndicator, Dimensions, Alert, Linking, ScrollView, Vibration, Share,
 } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { NotificationService } from '@/src/services/NotificationService';
+import { useTranslation } from 'react-i18next';
 
 const { width, height } = Dimensions.get('window');
 const SAFE_ZONE_RADIUS = 500; // metres
@@ -32,9 +33,14 @@ function distanceM(lat1: number, lon1: number, lat2: number, lon2: number) {
 export default function LiveTrackingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
-  const { session } = useAuthViewModel();
-  const patientId = session?.user?.id ?? '';
-  const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
+  const params = useLocalSearchParams();
+  const { session, role } = useAuthViewModel();
+  const { t } = useTranslation();
+  
+  // Logic: Patients monitor themselves via GPS. Caregivers monitor patients via DB.
+  const patientId = (params.patientId as string) || session?.user?.id || '';
+  const patientName = (params.patientName as string) || session?.user?.user_metadata?.full_name || 'Patient';
+  const isSelf = patientId === session?.user?.id;
 
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
@@ -86,8 +92,51 @@ export default function LiveTrackingScreen() {
       });
   }, [patientId]);
 
-  // Get current location once on mount
+  // REMOTE MONITORING: Subscribe to location updates if we are a caregiver
   useEffect(() => {
+    if (isSelf) return;
+
+    // 1. Get current location from DB
+    supabase
+      .from('patient_locations')
+      .select('*')
+      .eq('patientid', patientId)
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          const coords = { latitude: data.latitude, longitude: data.longitude, accuracy: data.accuracy || 0 };
+          setLocation(coords);
+          setLoading(false);
+          mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 800);
+        } else {
+          setLoading(false);
+        }
+      });
+
+    // 2. Subscribe to new updates
+    const sub = supabase
+      .channel(`location_${patientId}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'patient_locations',
+        filter: `patientid=eq.${patientId}`
+      }, (payload) => {
+        const coords = { latitude: payload.new.latitude, longitude: payload.new.longitude, accuracy: payload.new.accuracy || 0 };
+        setLocation(coords);
+        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.008, longitudeDelta: 0.008 }, 500);
+      })
+      .subscribe();
+
+    return () => { sub.unsubscribe(); };
+  }, [patientId, isSelf]);
+
+  // LOCAL TRACKING: Get current location once on mount for Patients
+  useEffect(() => {
+    if (!isSelf) return;
+
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') { setLoading(false); return; }
@@ -97,7 +146,7 @@ export default function LiveTrackingScreen() {
       setLoading(false);
       mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 800);
     })();
-  }, []);
+  }, [isSelf]);
 
   // Check safe zone whenever location changes
   useEffect(() => {
@@ -108,8 +157,10 @@ export default function LiveTrackingScreen() {
     }
   }, [location, safeZoneCenter]);
 
-  // Start / stop live tracking
+  // Start / stop live tracking (Patients ONLY)
   const toggleTracking = useCallback(async () => {
+    if (!isSelf) return;
+
     if (tracking) {
       locationSub.current?.remove();
       locationSub.current = null;
@@ -134,11 +185,11 @@ export default function LiveTrackingScreen() {
         });
       }
     );
-  }, [tracking, patientId]);
+  }, [tracking, patientId, isSelf]);
 
-  // Set home safe zone at current location
+  // Set home safe zone at current location (Patients ONLY)
   const setHomeZone = async () => {
-    if (!location) return;
+    if (!location || !isSelf) return;
     Alert.alert('Set Safe Zone', `Set your current location as your safe zone (${SAFE_ZONE_RADIUS}m radius)?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -154,8 +205,13 @@ export default function LiveTrackingScreen() {
     ]);
   };
 
-  // SOS — call primary contact + notify all contacts
+  // SOS — call primary contact + notify all contacts (Patients ONLY)
   const triggerSOS = () => {
+    if (!isSelf) {
+      Alert.alert('Remote Monitoring', 'Only the patient can trigger an SOS from their own device.');
+      return;
+    }
+
     if (sosActive) {
       Alert.alert('Cancel SOS', 'Are you safe? Cancel the SOS alert?', [
         { text: 'No, keep alert', style: 'cancel' },
@@ -189,26 +245,34 @@ export default function LiveTrackingScreen() {
   };
 
   // Share location via SMS/link
-  const shareLocation = () => {
+  const shareLocation = async () => {
     if (!location) return;
     const url = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
-    Linking.openURL(`sms:?body=I am here: ${url}`);
+    try {
+      await Share.share({
+        message: `I am here: ${url}`,
+        url: url, // iOS only
+      });
+    } catch (error) {
+      console.warn('Sharing failed:', error);
+    }
   };
 
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: themeColors.background }]}>
         <ActivityIndicator size="large" color={themeColors.tint} />
-        <Text style={{ marginTop: 12, color: themeColors.muted }}>Getting your location…</Text>
+        <Text style={{ marginTop: 12, color: themeColors.muted }}>{isSelf ? t('common.getting_location') : 'Connecting to patient...'}</Text>
       </View>
     );
   }
+
 
   const safeZoneStatus = insideSafeZone === null ? null : insideSafeZone;
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Safety & SOS', headerShown: true }} />
+      <Stack.Screen options={{ title: isSelf ? 'Safety & SOS' : `${patientName}'s Location`, headerShown: true }} />
 
       {/* Map */}
       {location ? (
@@ -217,7 +281,7 @@ export default function LiveTrackingScreen() {
           provider={PROVIDER_DEFAULT}
           style={styles.map}
           initialRegion={{ ...location, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-          showsUserLocation
+          showsUserLocation={isSelf}
           showsMyLocationButton={false}
         >
           {/* Safe zone circle */}
@@ -277,46 +341,50 @@ export default function LiveTrackingScreen() {
         {/* SOS button */}
         <View style={styles.sosRow}>
           <Animated.View style={[pulseStyle]}>
-            <TouchableOpacity onPress={triggerSOS} activeOpacity={0.85}>
+            <TouchableOpacity onPress={triggerSOS} activeOpacity={isSelf ? 0.85 : 1}>
               <LinearGradient
-                colors={sosActive ? ['#DC2626', '#991B1B'] : ['#EF4444', '#DC2626']}
+                colors={!isSelf ? ['#94A3B8', '#64748B'] : (sosActive ? ['#DC2626', '#991B1B'] : ['#EF4444', '#DC2626'])}
                 style={styles.sosBtn}
               >
                 <MaterialIcons name={sosActive ? 'cancel' : 'sos'} size={36} color="#fff" />
-                <Text style={styles.sosBtnText}>{sosActive ? 'CANCEL SOS' : 'SOS'}</Text>
+                <Text style={styles.sosBtnText}>{isSelf ? (sosActive ? 'CANCEL SOS' : 'SOS') : 'MONITORING'}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
 
           <View style={styles.sosActions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
-              onPress={toggleTracking}
-            >
-              <MaterialIcons
-                name={tracking ? 'location-off' : 'my-location'}
-                size={22}
-                color={tracking ? '#EF4444' : themeColors.tint}
-              />
-              <Text style={[styles.actionBtnText, { color: tracking ? '#EF4444' : themeColors.tint }]}>
-                {tracking ? 'Stop' : 'Track'}
-              </Text>
-            </TouchableOpacity>
+            {isSelf && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+                onPress={toggleTracking}
+              >
+                <MaterialIcons
+                  name={tracking ? 'location-off' : 'my-location'}
+                  size={22}
+                  color={tracking ? '#EF4444' : themeColors.tint}
+                />
+                <Text style={[styles.actionBtnText, { color: tracking ? '#EF4444' : themeColors.tint }]}>
+                  {tracking ? 'Stop Live' : 'Track Live'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {isSelf && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+                onPress={setHomeZone}
+              >
+                <MaterialIcons name="home" size={22} color="#6366F1" />
+                <Text style={[styles.actionBtnText, { color: '#6366F1' }]}>Safe Zone</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
-              onPress={setHomeZone}
-            >
-              <MaterialIcons name="home" size={22} color="#6366F1" />
-              <Text style={[styles.actionBtnText, { color: '#6366F1' }]}>Safe Zone</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+              style={[styles.actionBtn, { backgroundColor: themeColors.card, borderColor: themeColors.border, flex: isSelf ? 0 : 1 }]}
               onPress={shareLocation}
             >
               <MaterialIcons name="share-location" size={22} color="#10B981" />
-              <Text style={[styles.actionBtnText, { color: '#10B981' }]}>Share</Text>
+              <Text style={[styles.actionBtnText, { color: '#10B981' }]}>{isSelf ? 'Share' : 'Patient Map Link'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -335,13 +403,13 @@ export default function LiveTrackingScreen() {
             </View>
             <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
             <View style={styles.infoRow}>
-              <View style={[styles.infoIcon, { backgroundColor: tracking ? 'rgba(16,185,129,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-                <MaterialIcons name="sensors" size={18} color={tracking ? '#10B981' : themeColors.muted} />
+              <View style={[styles.infoIcon, { backgroundColor: 'rgba(16,185,129,0.1)' }]}>
+                <MaterialIcons name="sensors" size={18} color="#10B981" />
               </View>
               <View>
-                <Text style={[styles.infoLabel, { color: themeColors.muted }]}>Live Tracking</Text>
-                <Text style={[styles.infoValue, { color: tracking ? '#10B981' : themeColors.muted }]}>
-                  {tracking ? 'Active — updating every 15s' : 'Off'}
+                <Text style={[styles.infoLabel, { color: themeColors.muted }]}>Status</Text>
+                <Text style={[styles.infoValue, { color: '#10B981' }]}>
+                  {isSelf ? (tracking ? 'Active Updates' : 'Manual Mode') : 'Connected to Feed'}
                 </Text>
               </View>
             </View>
@@ -402,7 +470,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', gap: 4,
     shadowColor: '#EF4444', shadowOpacity: 0.5, shadowRadius: 16, elevation: 10,
   },
-  sosBtnText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  sosBtnText: { color: '#fff', fontWeight: '900', fontSize: 11, letterSpacing: 0.5, textAlign: 'center', paddingHorizontal: 4 },
 
   sosActions: { flex: 1, gap: 10 },
   actionBtn: {

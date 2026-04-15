@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
   ScrollView, ActivityIndicator, Alert, Platform, StatusBar,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -18,20 +18,25 @@ export default function EmergencyContactsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const C = Colors[colorScheme as 'light' | 'dark'];
+  const params = useLocalSearchParams();
 
   const { session } = useAuthViewModel();
-  const patientId = session?.user?.id ?? '';
+  
+  // Scoping: Use params if provided, default to session for patients
+  const patientId = (params.patientId as string) || session?.user?.id || '';
+  const isSelf = patientId === session?.user?.id;
 
   const { contacts, loading, addContact, deleteContact, setPrimary } =
     useEmergencyContactsViewModel(patientId);
 
-  const [showForm, setShowForm]       = useState(contacts.length === 0);
+  const [showForm, setShowForm]       = useState(false);
   const [name, setName]               = useState('');
   const [phone, setPhone]             = useState('');
   const [relationship, setRelationship] = useState('');
   const [saving, setSaving]           = useState(false);
 
   const handleAdd = async () => {
+    if (!isSelf) return; // Shield
     if (!name.trim() || !phone.trim()) {
       Alert.alert('Missing fields', 'Please enter a name and phone number.');
       return;
@@ -49,6 +54,7 @@ export default function EmergencyContactsScreen() {
   };
 
   const handleDelete = (id: string, contactName: string) => {
+    if (!isSelf) return; // Shield
     Alert.alert(
       'Remove Contact',
       `Remove ${contactName} from your emergency contacts?`,
@@ -77,26 +83,28 @@ export default function EmergencyContactsScreen() {
             <MaterialIcons name="contact-phone" size={22} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Emergency Contacts</Text>
+            <Text style={styles.headerTitle}>{isSelf ? 'My Emergency Contacts' : 'Patient Contacts'}</Text>
             <Text style={styles.headerSub}>
               {contacts.length === 0
-                ? 'Add someone to alert if a fall is detected'
+                ? (isSelf ? 'Add someone to alert if a fall is detected' : 'No contacts configured')
                 : `${contacts.length} contact${contacts.length > 1 ? 's' : ''} — primary gets SMS alerts`}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.addFab, { backgroundColor: showForm ? 'rgba(255,255,255,0.2)' : '#fff' }]}
-            onPress={() => setShowForm(v => !v)}
-          >
-            <MaterialIcons name={showForm ? 'close' : 'add'} size={22} color={showForm ? '#fff' : '#DC2626'} />
-          </TouchableOpacity>
+          {isSelf && (
+            <TouchableOpacity
+              style={[styles.addFab, { backgroundColor: showForm ? 'rgba(255,255,255,0.2)' : '#fff' }]}
+              onPress={() => setShowForm(v => !v)}
+            >
+              <MaterialIcons name={showForm ? 'close' : 'add'} size={22} color={showForm ? '#fff' : '#DC2626'} />
+            </TouchableOpacity>
+          )}
         </View>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* ── Add Form ─────────────────────────────────────── */}
-        {showForm && (
+        {showForm && isSelf && (
           <Animated.View entering={FadeInDown.duration(300)} style={[styles.formCard, { backgroundColor: isDark ? '#1E293B' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(220,38,38,0.15)' }]}>
             <Text style={[styles.formTitle, { color: C.text }]}>New Contact</Text>
 
@@ -167,11 +175,15 @@ export default function EmergencyContactsScreen() {
             </View>
             <Text style={[styles.emptyTitle, { color: C.text }]}>No contacts yet</Text>
             <Text style={[styles.emptySub, { color: C.muted }]}>
-              Add at least one person who should be alerted if a fall is detected.
+              {isSelf 
+                ? 'Add at least one person who should be alerted if a fall is detected.'
+                : 'This patient has not configured any emergency contacts yet.'}
             </Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowForm(true)}>
-              <Text style={styles.emptyBtnText}>+ Add First Contact</Text>
-            </TouchableOpacity>
+            {isSelf && (
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowForm(true)}>
+                <Text style={styles.emptyBtnText}>+ Add First Contact</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         )}
 
@@ -207,22 +219,24 @@ export default function EmergencyContactsScreen() {
                   ) : null}
                 </View>
 
-                <View style={styles.contactActions}>
-                  {!contact.isPrimary && (
+                {isSelf && (
+                  <View style={styles.contactActions}>
+                    {!contact.isPrimary && (
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { backgroundColor: 'rgba(220,38,38,0.1)' }]}
+                        onPress={() => setPrimary(contact.id)}
+                      >
+                        <MaterialIcons name="star-outline" size={16} color="#DC2626" />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: 'rgba(220,38,38,0.1)' }]}
-                      onPress={() => setPrimary(contact.id)}
+                      style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9' }]}
+                      onPress={() => handleDelete(contact.id, contact.name)}
                     >
-                      <MaterialIcons name="star-outline" size={16} color="#DC2626" />
+                      <MaterialIcons name="delete-outline" size={16} color={C.muted} />
                     </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9' }]}
-                    onPress={() => handleDelete(contact.id, contact.name)}
-                  >
-                    <MaterialIcons name="delete-outline" size={16} color={C.muted} />
-                  </TouchableOpacity>
-                </View>
+                  </View>
+                )}
               </View>
             </View>
           </Animated.View>
@@ -233,7 +247,9 @@ export default function EmergencyContactsScreen() {
           <Animated.View entering={FadeInDown.delay(300).duration(400)} style={[styles.infoStrip, { backgroundColor: isDark ? 'rgba(220,38,38,0.08)' : 'rgba(220,38,38,0.06)', borderColor: isDark ? 'rgba(220,38,38,0.2)' : 'rgba(220,38,38,0.15)' }]}>
             <MaterialIcons name="info-outline" size={16} color="#DC2626" />
             <Text style={[styles.infoText, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
-              The primary contact receives an SMS with your location when a fall is confirmed.
+              {isSelf 
+                ? 'The primary contact receives an SMS with your location when a fall is confirmed.'
+                : 'Primary contacts are notified automatically of emergency events.'}
             </Text>
           </Animated.View>
         )}

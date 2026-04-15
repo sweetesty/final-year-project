@@ -7,16 +7,16 @@ export class DoctorService {
   static async ensurePatientCode(userId: string) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('patient_code')
+      .select('patientcode')
       .eq('id', userId)
       .single();
 
-    if (profile?.patient_code) return profile.patient_code;
+    if (profile?.patientcode) return profile.patientcode;
 
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
     await supabase
       .from('profiles')
-      .update({ patient_code: newCode })
+      .update({ patientcode: newCode })
       .eq('id', userId);
     
     return newCode;
@@ -30,7 +30,7 @@ export class DoctorService {
     const { data: patient, error: findError } = await supabase
       .from('profiles')
       .select('id')
-      .eq('patient_code', sanitizedCode)
+      .eq('patientcode', sanitizedCode)
       .single();
 
     if (findError || !patient) throw new Error("Invalid Patient Code. Please check and try again.");
@@ -72,7 +72,7 @@ export class DoctorService {
     // 3. Fetch the profiles for these patients (Manual Join)
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
-      .select('id, full_name, avatar_url')
+      .select('id, full_name, avatar_url, push_token')
       .in('id', patientIds);
 
     if (profileError) {
@@ -115,7 +115,7 @@ export class DoctorService {
       // 2. Fetch the doctor's profile (Manual Join)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, role')
+        .select('id, full_name, avatar_url, role, phone, push_token')
         .eq('id', link.doctor_id)
         .single();
       
@@ -189,7 +189,8 @@ export class DoctorService {
         .from('fall_events')
         .select('*')
         .in('patientid', patientids)
-        .eq('status', 'unresolved')
+        .neq('status', 'resolved')
+        .eq('resolved', false)
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
@@ -320,7 +321,7 @@ export class DoctorService {
       // or using .ilike if your Supabase supports it, but .eq is standard.
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, role')
+        .select('id, full_name, avatar_url, role, phone')
         .or('role.eq.doctor,role.eq.Doctor'); 
 
       if (error) {

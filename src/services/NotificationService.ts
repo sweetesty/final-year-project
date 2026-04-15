@@ -108,7 +108,7 @@ export class NotificationService {
               data: { medicationId: medication.id },
               sound: isCritical ? 'default' : 'default',
               channelId: 'default',
-            },
+            } as any,
             trigger: {
               type: Notifications.SchedulableTriggerInputTypes.DATE,
               date: fireDate,
@@ -125,7 +125,7 @@ export class NotificationService {
             data: { medicationId: medication.id },
             sound: 'default',
             channelId: 'default',
-          },
+          } as any,
           trigger: this.getTriggerForFrequency(frequency, hours, minutes, specificDays),
         });
         console.log(`[Notifications] Scheduled repeating reminder for ${name} at ${time} — ID: ${identifier}`);
@@ -164,6 +164,21 @@ export class NotificationService {
       minute,
       repeats: true,
     };
+  }
+
+  static async cancelMedicationReminders(medicationId: string) {
+    if (!medicationId) return;
+    try {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const toCancel = scheduled.filter(n => n.content.data?.medicationId === medicationId);
+      
+      for (const n of toCancel) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+      console.log(`[Notifications] Cancelled ${toCancel.length} scheduled reminders for med: ${medicationId}`);
+    } catch (e) {
+      console.warn('[NotificationService] Failed to cancel reminders:', e);
+    }
   }
 
   static async cancelAllReminders() {

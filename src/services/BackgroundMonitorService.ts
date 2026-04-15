@@ -44,16 +44,17 @@ if (!isExpoGo) {
       if (gForce > BG_FALL_THRESHOLD) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) {
-          return BackgroundTask?.BackgroundTaskResult?.NoData ?? 1;
+          return BackgroundTask?.BackgroundTaskResult?.Success ?? 1;
         }
 
         const patientId = session.user.id;
         const patientName = session.user.user_metadata?.full_name ?? 'Patient';
 
+        const timestamp = new Date().toLocaleString();
         await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Possible Fall Detected',
-            body: 'Are you okay? Open the app to cancel the emergency alert.',
+            body: `I detected a possible fall at ${timestamp}. Are you okay? Open the app to cancel the alert.`,
             data: { type: 'fall_warning' },
             sound: 'default',
           },
@@ -84,16 +85,17 @@ if (!isExpoGo) {
           .single();
 
         if (contact) {
+          const timestamp = new Date().toLocaleString();
           await SmsService.sendEmergencySms(
             contact.phone,
-            `ALERT: ${patientName} may have fallen (background detection). Location: ${mapsLink}`
+            `ALERT: ${patientName} may have fallen at ${timestamp} (background detection). Location: ${mapsLink}`
           );
         }
 
-        return BackgroundTask?.BackgroundTaskResult?.Success ?? 0;
+        return BackgroundTask?.BackgroundTaskResult?.Success ?? 1;
       }
 
-      return BackgroundTask?.BackgroundTaskResult?.NoData ?? 1;
+      return BackgroundTask?.BackgroundTaskResult?.Success ?? 1;
     } catch (error) {
       console.error('[BackgroundMonitor] Error:', error);
       return BackgroundTask?.BackgroundTaskResult?.Failed ?? 2;
@@ -133,8 +135,7 @@ export class BackgroundMonitorService {
     try {
       const status = await BackgroundTask.getStatusAsync();
       if (
-        status === BackgroundTask.BackgroundTaskStatus.Restricted ||
-        status === BackgroundTask.BackgroundTaskStatus.Denied
+        status !== BackgroundTask.BackgroundTaskStatus.Available
       ) {
         console.warn('[BackgroundMonitor] Background task is restricted or denied.');
         return false;

@@ -2,6 +2,7 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { documentDirectory, getInfoAsync, makeDirectoryAsync, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import { encode } from 'base64-arraybuffer';
+import i18n from '@/src/i18n';
 
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 
@@ -113,13 +114,20 @@ export class SpeechService {
       await _stopCurrent();
       Speech.stop();
 
-      const success = await _speakGroq(text);
-      if (!success) {
-        _fallbackSpeak(text, lng);
+      const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';
+      const isEnglish = language.startsWith('en');
+
+      // Only attempt Groq for English content
+      if (isEnglish) {
+        const success = await _speakGroq(text);
+        if (success) return;
       }
+
+      // Fallback for English or direct use for native languages
+      _fallbackSpeak(text, language);
     } catch (e) {
       console.warn('[SpeechService] speak() error:', e);
-      _fallbackSpeak(text, lng);
+      _fallbackSpeak(text, lng || i18n.language);
     }
   }
 

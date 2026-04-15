@@ -1,29 +1,46 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '../services/SupabaseService';
 import { Medication, MedicationLog, NewMedication } from '../models/Medication';
 import { NotificationService } from '../services/NotificationService';
 import { OfflineSyncService } from '../services/OfflineSyncService';
+import { SmsService } from '../services/SmsService';
+import { DoctorService } from '../services/DoctorService';
+import { CaregiverService } from '../services/CaregiverService';
 
-export const useMedicationViewModel = (patientId: string) => {
+export const useMedicationViewModel = (patientId: string, patientName?: string) => {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [todayLogs, setTodayLogs] = useState<MedicationLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
 
-  const fetchMedications = useCallback(async () => {
-    // Don't query until we have a real UUID
-    if (!patientId || patientId === 'patient-123') { setLoading(false); return; }
-    setLoading(true);
+  const fetchMedications = useCallback(async (silent = false) => {
+    if (!patientId || patientId.length < 10) { 
+      setLoading(false);
+      setHasFetched(true);
+      return; 
+    }
+    
+    if (patientId === 'patient-123') { 
+      setLoading(false); 
+      setHasFetched(true);
+      return; 
+    }
+
     const { data, error } = await supabase
       .from('medications')
       .select('*')
       .eq('patientid', patientId);
 
-    if (error) console.error(error);
-    else {
-      // Map DB lowercase column names to model fields
+    if (error) {
+      console.error('[MedicationViewModel] Fetch error:', error);
+    } else {
       const mapped = (data || []).map((m: any) => ({
         ...m,
         isCritical: m.iscritical,
+        isPrescribed: m.is_prescribed,
+        prescribedBy: m.prescribed_by,
         patientId: m.patientid,
         createdAt: m.createdat,
         durationDays: m.duration_days,
@@ -33,11 +50,13 @@ export const useMedicationViewModel = (patientId: string) => {
       setMedications(mapped);
     }
     setLoading(false);
+    setRefreshing(false);
+    setHasFetched(true);
   }, [patientId]);
 
   const fetchTodayLogs = useCallback(async () => {
-    // Don't query until we have a real UUID
-    if (!patientId || patientId === 'patient-123') return;
+    if (!patientId || patientId.length < 10 || patientId === 'patient-123') return;
+    
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -47,13 +66,49 @@ export const useMedicationViewModel = (patientId: string) => {
       .eq('patientid', patientId)
       .gte('takenat', startOfDay.toISOString()); 
 
-    if (error) console.error(error);
+    if (error) console.error('[MedicationViewModel] Logs error:', error);
     else setTodayLogs(data || []);
   }, [patientId]);
 
+  // Calculations for summary stats
+  const summary = useMemo(() => {
+    const schedule = medications.flatMap(med =>
+      med.times.map(time => {
+        const log = todayLogs.find(l => 
+          (l.medicationid === med.id || l.medicationId === med.id) && 
+          (l.scheduledtime === time || l.scheduledTime === time)
+        );
+        return {
+          medId: med.id,
+          name: med.name,
+          time,
+          status: log?.status || 'pending',
+          isCritical: med.isCritical
+        };
+      })
+    ).sort((a, b) => a.time.localeCompare(b.time));
+
+    const now = new Date();
+    const currentTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const upcoming = schedule.find(s => s.status === 'pending' && s.time >= currentTimeStr);
+    const taken = schedule.filter(s => s.status === 'taken').length;
+    const missed = schedule.filter(s => s.status === 'skipped' || s.status === 'missed').length;
+    const pending = schedule.filter(s => s.status === 'pending').length;
+
+    return {
+      totalToday: schedule.length,
+      takenCount: taken,
+      missedCount: missed,
+      pendingCount: pending,
+      upcomingDose: upcoming || null,
+      fullSchedule: schedule
+    };
+  }, [medications, todayLogs]);
+
   const addMedication = async (newMed: NewMedication) => {
     if (!patientId || patientId.length < 10) {
-      alert('Patient context not ready. Please wait a moment.');
+      Alert.alert('Error', 'Patient context not ready. Please wait a moment.');
       return;
     }
     const startDate = newMed.startDate ?? new Date().toISOString().split('T')[0];
@@ -72,6 +127,8 @@ export const useMedicationViewModel = (patientId: string) => {
         dosage: newMed.dosage,
         instructions: newMed.instructions,
         iscritical: newMed.isCritical,
+        is_prescribed: newMed.isPrescribed,
+        prescribed_by: newMed.prescribedBy,
         times: newMed.times,
         frequency: newMed.frequency,
         patientid: patientId,
@@ -83,11 +140,13 @@ export const useMedicationViewModel = (patientId: string) => {
       .single();
 
     if (error) {
-      alert(error.message);
+      Alert.alert('Failed to Add', error.message);
     } else {
       const mapped = {
         ...data,
         isCritical: data.iscritical,
+        isPrescribed: data.is_prescribed,
+        prescribedBy: data.prescribed_by,
         patientId: data.patientid,
         durationDays: data.duration_days,
         startDate: data.start_date,
@@ -101,7 +160,11 @@ export const useMedicationViewModel = (patientId: string) => {
 
   const deleteMedication = async (medicationId: string) => {
     const { error } = await supabase.from('medications').delete().eq('id', medicationId);
-    if (error) { alert(error.message); return; }
+    if (error) { Alert.alert('Error', error.message); return; }
+    
+    // Cleanup scheduled notifications
+    await NotificationService.cancelMedicationReminders(medicationId);
+    
     setMedications(prev => prev.filter(m => m.id !== medicationId));
   };
 
@@ -117,13 +180,13 @@ export const useMedicationViewModel = (patientId: string) => {
         frequency: updates.frequency,
       })
       .eq('id', medicationId);
-    if (error) { alert(error.message); return; }
+    if (error) { Alert.alert('Error', error.message); return; }
     await fetchMedications();
   };
 
   const logDose = async (medicationId: string, scheduledTime: string, status: 'taken' | 'skipped') => {
     if (!patientId || patientId.length < 10) {
-      alert('Patient context not ready.');
+      Alert.alert('Error', 'Patient context not ready.');
       return;
     }
     try {
@@ -135,23 +198,115 @@ export const useMedicationViewModel = (patientId: string) => {
         takenat: new Date().toISOString(),
       });
       await fetchTodayLogs();
+
+      if (status === 'skipped') {
+        const med = medications.find(m => m.id === medicationId);
+        if (med) {
+          const doctor = await DoctorService.getLinkedDoctor(patientId);
+          const caregivers = await CaregiverService.getLinkedCaregivers(patientId);
+          const displayName = patientName || 'A patient';
+
+          if (doctor?.push_token) {
+            await NotificationService.sendPushToToken(
+              doctor.push_token,
+              'Medication Skipped',
+              `${displayName} just skipped their scheduled dose of ${med.name}.`,
+              { type: 'med_skipped', patientId }
+            );
+          }
+
+          for (const cg of caregivers) {
+            if (cg.push_token) {
+              await NotificationService.sendPushToToken(
+                cg.push_token,
+                'Medication Skipped',
+                `${displayName} just skipped their scheduled dose of ${med.name}.`,
+                { type: 'med_skipped', patientId }
+              );
+            }
+          }
+        }
+      }
     } catch (error: any) {
-      alert(error.message);
+      Alert.alert('Log Error', error.message);
     }
   };
+
+  const checkMissedCriticalMedications = useCallback(async () => {
+    if (!patientId || patientId.length < 10 || medications.length === 0) return;
+
+    const now = new Date();
+    const displayName = patientName || 'A patient';
+    
+    // 1. Get contact info (emergency and doctor)
+    const { data: profile } = await supabase.from('profiles').select('emergency_contact_phone').eq('id', patientId).single();
+    const doctor = await DoctorService.getLinkedDoctor(patientId);
+    const caregivers = await CaregiverService.getLinkedCaregivers(patientId);
+
+    const emergencyPhone = profile?.emergency_contact_phone;
+    const doctorPhone = doctor?.phone;
+
+    if (!emergencyPhone && !doctorPhone && caregivers.length === 0) return;
+
+    for (const med of medications) {
+      if (!med.isCritical) continue;
+
+      for (const time of med.times) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const scheduledDate = new Date();
+        scheduledDate.setHours(hours, minutes, 0, 0);
+
+        const diffMinutes = (now.getTime() - scheduledDate.getTime()) / (1000 * 60);
+
+        // If it's more than 30 mins late but less than 4 hours (to avoid spamming old ones)
+        if (diffMinutes > 30 && diffMinutes < 240) {
+          const log = todayLogs.find(l => 
+            (l.medicationid === med.id || l.medicationId === med.id) && 
+            (l.scheduledtime === time || l.scheduledTime === time)
+          );
+
+          if (!log) {
+            console.warn(`[Escalation] Critical med ${med.name} missed at ${time}`);
+            if (emergencyPhone) await SmsService.sendEmergencyEscalation(emergencyPhone, displayName, med.name);
+            if (doctorPhone) await SmsService.sendEmergencyEscalation(doctorPhone, displayName, med.name);
+
+            // Notify all linked caregivers
+            for (const cg of caregivers) {
+              if (cg.push_token) {
+                await NotificationService.sendPushToToken(
+                  cg.push_token,
+                  '🚨 Critical Medication Missed',
+                  `${displayName} missed their scheduled ${med.name}. Please check on them.`,
+                  { type: 'emergency_med', patientId }
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  }, [patientId, medications, todayLogs, patientName]);
 
   useEffect(() => {
     fetchMedications();
     fetchTodayLogs();
   }, [fetchMedications, fetchTodayLogs]);
 
-  // Real-time subscription: instantly show new prescriptions added by doctor
+  // Periodic check for missed critical meds
   useEffect(() => {
-    if (!patientId || patientId === 'patient-123') return;
+    const interval = setInterval(() => {
+      checkMissedCriticalMedications();
+    }, 10 * 60 * 1000); // Check every 10 minutes
+    return () => clearInterval(interval);
+  }, [checkMissedCriticalMedications]);
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!patientId || patientId.length < 10 || patientId === 'patient-123') return;
 
     const channelName = `medications_${patientId}`;
     
-    // Remove any stale channel with this name first (prevents remount conflicts)
+    // Remove any stale channel with this name first
     const existing = supabase.getChannels().find(c => c.topic.includes(channelName));
     if (existing) supabase.removeChannel(existing);
 
@@ -162,9 +317,24 @@ export const useMedicationViewModel = (patientId: string) => {
         schema: 'public',
         table: 'medications',
         filter: `patientid=eq.${patientId}`,
-      }, () => {
+      }, (payload: any) => {
+        const newMed = payload.new;
+        if (newMed.is_prescribed) {
+          NotificationService.showLocalNotification(
+            '📋 New Prescription Added',
+            `Doctor ${newMed.prescribed_by || ''} has added ${newMed.name} to your schedule.`
+          );
+        }
         fetchMedications();
       })
+      .on('postgres_changes', {
+        event: 'ALL', // Watch all changes for summary updates
+        schema: 'public',
+        table: 'medication_logs',
+        filter: `patientid=eq.${patientId}`,
+      }, () => {
+        fetchTodayLogs();
+      }) // End of log watch
       .on('postgres_changes', {
         event: 'DELETE',
         schema: 'public',
@@ -181,11 +351,13 @@ export const useMedicationViewModel = (patientId: string) => {
   return {
     medications,
     todayLogs,
+    summary,
     loading,
+    refreshing,
     addMedication,
     updateMedication,
     deleteMedication,
     logDose,
-    refresh: () => { fetchMedications(); fetchTodayLogs(); },
+    refresh: (silent = true) => { fetchMedications(silent); fetchTodayLogs(); },
   };
 };

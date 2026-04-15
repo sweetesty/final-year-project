@@ -156,7 +156,11 @@ export default function EmergencyCaseScreen() {
         text: 'Mark Resolved', onPress: async () => {
           setResolving(true);
           if (alertId) {
-            await supabase.from('fall_events').update({ resolved: true }).eq('id', alertId);
+            await supabase.from('fall_events').update({ 
+              resolved: true,
+              status: 'resolved',
+              resolved_at: new Date().toISOString()
+            }).eq('id', alertId);
           }
           setResolving(false);
           router.back();

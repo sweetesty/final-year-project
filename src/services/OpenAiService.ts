@@ -85,4 +85,32 @@ Provide a 1-2 sentence response that is extremely comforting and assesses their 
 
     return this.sendMessage(prompt, 'EMERGENCY CRITICAL STATE');
   }
+
+  static async generateClinicalNarrative(healthData: any): Promise<string> {
+    try {
+      if (!GROQ_API_KEY) {
+        return "AI summary requires a configured Groq API key.";
+      }
+      const prompt = `
+You are a Clinical Data Auditor. Review this patient's 7-day health data and write a concise, professional clinical narrative for the doctor.
+Highlight key correlations (e.g., missed medications correlating with reported symptoms or vitals changes).
+Keep it mostly objective, empathetic but highly clinical. Maximum 3-4 short sentences. No introductory fluff.
+
+PATIENT DATA:
+${JSON.stringify(healthData)}
+`;
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3, 
+        max_tokens: 300,
+      });
+
+      return response.choices[0]?.message?.content || "Could not generate narrative.";
+    } catch (error) {
+      console.error('[GroqService] Clinical Narrative Error:', error);
+      return "I'm having trouble analyzing the clinical data right now.";
+    }
+  }
 }
+

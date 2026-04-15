@@ -47,11 +47,27 @@ export default function DoctorHomeScreen() {
   const h = new Date().getHours();
   const greeting = h < 12 ? t('home.welcome') : h < 17 ? t('home.good_afternoon') : t('home.good_evening');
 
-  const load = useCallback(async () => {
+  const refreshAlertsOnly = useCallback(async () => {
     if (!session?.user?.id) return;
-    setLoading(true);
+    try {
+      const alerts = await DoctorService.getUnresolvedAlerts(session.user.id);
+      setActiveAlerts(alerts);
+      setStats(prev => ({ ...prev, alerts: alerts.length }));
+    } catch (e) {
+      console.error('[DoctorHome] Alert refresh error:', e);
+    }
+  }, [session]);
+
+  const load = useCallback(async (isSilent = false) => {
+    if (!session?.user?.id) return;
+    if (!isSilent) setLoading(true);
     try {
       const patients = await DoctorService.getLinkedPatients(session.user.id);
+      // Heavy clinical data fetching - kept separate to avoid blocking alert display
+      const alerts = await DoctorService.getUnresolvedAlerts(session.user.id);
+      setActiveAlerts(alerts);
+      setStats({ patients: patients.length, alerts: alerts.length });
+
       const enhanced = await Promise.all(
         patients.map(async (p) => {
           const ctx = await DoctorService.getPatientClinicalContext(p.id);
@@ -59,11 +75,8 @@ export default function DoctorHomeScreen() {
         })
       );
       setLinkedPatients(enhanced);
-      const alerts = await DoctorService.getUnresolvedAlerts(session.user.id);
-      setActiveAlerts(alerts);
-      setStats({ patients: patients.length, alerts: alerts.length });
     } catch (e) {
-      console.error('[DoctorHome]', e);
+      console.error('[DoctorHome] Full load error:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -73,17 +86,25 @@ export default function DoctorHomeScreen() {
   useEffect(() => {
     if (!session?.user?.id) return;
     const channel = supabase.channel('doctor-home-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fall_events' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fall_events' }, (payload) => {
+        // Optimistic State Filter: If an alert is updated to resolved, remove it instantly from UI
+        if (payload.eventType === 'UPDATE' && (payload.new.status === 'resolved' || payload.new.resolved)) {
+           setActiveAlerts(prev => prev.filter(a => a.id !== payload.new.id));
+           setStats(prev => ({ ...prev, alerts: Math.max(0, prev.alerts - 1) }));
+        }
+        // Always trigger a clean fetch to ensure sync
+        refreshAlertsOnly();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [session, load]);
+  }, [session, refreshAlertsOnly]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleAcceptAlert = async (alertId: string, patientId: string, patientName: string) => {
     try {
       await DoctorService.acceptAlert(alertId, session!.user.id);
-      load();
+      refreshAlertsOnly(); // Targeted refresh
       router.push({ pathname: '/emergency-case', params: { patientId, patientName, alertId } });
     } catch { Alert.alert('Error', 'Could not accept alert.'); }
   };

@@ -39,6 +39,10 @@ import { BarChart } from 'react-native-chart-kit';
 import { useTranslation } from 'react-i18next';
 import { SymptomLogModal } from '@/src/components/SymptomLogModal';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
+import { useSymptomViewModel } from '@/src/viewmodels/useSymptomViewModel';
+import { useVitalsViewModel } from '@/src/viewmodels/useVitalsViewModel';
+import { VitalsTrendChart } from '@/src/components/AnalyticsCharts';
+import { supabase } from '@/src/services/SupabaseService';
 
 const { width } = Dimensions.get('window');
 
@@ -109,27 +113,40 @@ export default function HomeScreen() {
   const patientid   = session?.user?.id ?? '';
   const patientName = session?.user?.user_metadata?.full_name ?? 'Patient';
 
-  const navigationState = useRootNavigationState();
-  const isNavReady = navigationState?.key;
+  const rootNavigationState = useRootNavigationState();
+  const isNavReady = !!rootNavigationState?.key;
 
-  // --- Doctor Shield & Redirect ---
+  // --- Role Shield & Redirect ---
   useEffect(() => {
-    if (isNavReady && role === 'doctor') {
-      router.replace('/doctor-home');
+    if (isNavReady && role) {
+      // Small timeout to ensure the navigator is fully settled
+      const timeout = setTimeout(() => {
+        if (role === 'doctor') {
+          router.replace('/(tabs)/doctor-home');
+        } else if (role === 'caregiver') {
+          router.replace('/(tabs)/caregiver');
+        }
+      }, 0);
+      return () => clearTimeout(timeout);
     }
   }, [role, isNavReady, router]);
 
-  const { medications, refresh: refreshMeds } = useMedicationViewModel(patientid);
+  const { medications, refresh: refreshMeds } = useMedicationViewModel(patientid, patientName);
+  const { logSymptom } = useSymptomViewModel(patientid, patientName);
+  const { chartData, fetchHistory } = useVitalsViewModel(patientid);
 
   // Refresh data whenever dashboard becomes focused (after adding a med)
   useFocusEffect(
     useCallback(() => {
-      if (patientid) refreshMeds();
-    }, [patientid, refreshMeds])
+      if (patientid) {
+        refreshMeds();
+        fetchHistory();
+      }
+    }, [patientid, refreshMeds, fetchHistory])
   );
   const firstName   = patientName.split(' ')[0];
 
-  const { state: fallState, cancelAlert, isUserActive } = useFallDetectionViewModel(patientid, patientName);
+  const { state: fallState, cancelAlert, countdown, isUserActive } = useFallDetectionViewModel(patientid, patientName);
 
   const [patientCode, setPatientCode] = useState('––– –––');
   const [vitals, setVitals] = useState<Vitals>({ heartrate: 72, spo2: 98, steps: 1240, activeMin: 42 });
@@ -139,7 +156,7 @@ export default function HomeScreen() {
     console.log('[Auth] Current User ID:', patientid || 'NOT_LOGGED_IN');
     console.log('[Auth] Current Role:', role || 'NO_ROLE');
 
-    if (role === 'doctor') return;
+    if (role !== 'patient') return;
     // For this demo, we show it 2 seconds after mount to simulate a proactive prompt
     const timer = setTimeout(() => {
       setSymptomModalVisible(true);
@@ -172,7 +189,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!patientid) return;
     DoctorService.ensurePatientCode(patientid)
-      .then(c => { if (c) setPatientCode(c.replace(/(\d{3})(\d{3})/, '$1 $2')); })
+      .then(c => { if (c) setPatientCode(c); })
       .catch(console.error);
 
     DoctorService.getLinkedDoctor(patientid)
@@ -267,9 +284,18 @@ export default function HomeScreen() {
   }, [patientid, firstName, i18n.language]);
 
   const handleLogSymptom = async (type: string) => {
-    // Real-world: supabase.from('symptoms').insert(...)
-    console.log('[Symptom] Logged:', type);
-    setSymptomModalVisible(false);
+    try {
+      if (patientid) {
+        await logSymptom(type, 'Logged via Home quick-log modal', 'moderate');
+        // Optional: show a confirmation
+        Alert.alert('Status Sent', 'Your doctor has been notified of how you are feeling.');
+      }
+      setSymptomModalVisible(false);
+    } catch (e) {
+      console.error('[Symptom] Failed to notify doctor:', e);
+      Alert.alert('Error', 'Failed to send symptom report. Please try again.');
+      setSymptomModalVisible(false);
+    }
   };
 
   const zone = hrZone(vitals.heartrate);
@@ -293,8 +319,8 @@ export default function HomeScreen() {
     SpeechService.speak(fullText, lng);
   };
 
-  // Prevent UI flicker for doctors before redirect
-  if (role === 'doctor') {
+  // Prevent UI flicker for non-patients before redirect
+  if (role !== 'patient' && role !== null) {
     return (
       <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={C.tint} />
@@ -308,7 +334,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* ── AI Companion FAB ─────────────────────────────────────────── */}
-      {role !== 'doctor' && (
+      {role === 'patient' && (
         <Animated.View entering={FadeIn.delay(600).duration(400)} style={styles.fab} pointerEvents="box-none">
           <TouchableOpacity onPress={() => router.push('/ai-chat')} activeOpacity={0.85}>
             <LinearGradient colors={['#4F46E5', '#6D28D9']} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -319,13 +345,16 @@ export default function HomeScreen() {
       )}
 
       {/* ── Fall Alert Sheet — PATIENTS ONLY (slides up from bottom) ──── */}
-      {role !== 'doctor' && (
+      {role === 'patient' && (
         <Animated.View style={[styles.fallSheet, alertStyle]}>
           <LinearGradient colors={['#7F1D1D', '#DC2626']} style={styles.fallSheetInner}>
             <View style={styles.fallSheetTop}>
               <MaterialIcons name="warning" size={32} color="#fff" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.fallSheetTitle}>{t('home.fall_detected')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.fallSheetTitle}>{t('home.fall_detected')}</Text>
+                  <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900' }}>{countdown}s</Text>
+                </View>
                 <Text style={styles.fallSheetSub}>{t('home.fall_alert_sub')}</Text>
               </View>
             </View>
@@ -436,6 +465,28 @@ export default function HomeScreen() {
             <VitalTile icon="timer"          value={`${vitals.activeMin}m`} unit="active" label={t('home.active_time')}  color="#8B5CF6" delay={180} />
           </ScrollView>
         </View>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            TREND CHART  — Heart rate over 24 hours
+        ════════════════════════════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(240).duration(450)} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>24-Hour Heart Rate</Text>
+            <TouchableOpacity onPress={() => fetchHistory()}>
+               <MaterialIcons name="refresh" size={16} color={C.tint} />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.chartCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
+             <VitalsTrendChart 
+                data={chartData.heartRate.data} 
+                labels={chartData.heartRate.labels} 
+                theme={{ vital: '#EF4444' }} 
+             />
+             <Text style={[styles.chartHint, { color: C.muted }]}>
+                Real-time trend captured via background monitoring.
+             </Text>
+          </View>
+        </Animated.View>
 
         {/* ═══════════════════════════════════════════════════════════════
             AI COMPANION  — full-width banner, not a circle
@@ -745,6 +796,8 @@ const styles = StyleSheet.create({
   historyLoadingText: { fontSize: 14 },
   historyContent: {},
   chartWrap: { alignItems: 'center', marginBottom: 12 },
+  chartHint: { fontSize: 11, textAlign: 'center', marginTop: -4, fontStyle: 'italic', paddingHorizontal: 20 },
+  chartCard: { borderRadius: 16, padding: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)', marginBottom: 12 },
   historyList: { marginTop: 8 },
   historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   historyLabel: { fontSize: 15, fontWeight: '600' },

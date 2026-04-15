@@ -36,9 +36,15 @@ CREATE TABLE profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
   role TEXT CHECK (role IN ('patient', 'doctor')) NOT NULL DEFAULT 'patient',
-  patient_code TEXT UNIQUE,
+  patientcode TEXT UNIQUE,
+  phone TEXT,
+  emergency_contact_phone TEXT,
+  specialization TEXT,
   push_token TEXT,
   avatar_url TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  last_seen TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -76,11 +82,11 @@ CREATE TABLE doctor_patient_links (
 ```sql
 CREATE TABLE emergency_contacts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
   relationship TEXT,
-  "isPrimary" BOOLEAN DEFAULT FALSE,
+  isprimary BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -89,14 +95,18 @@ CREATE TABLE emergency_contacts (
 ```sql
 CREATE TABLE medications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   dosage TEXT,
   frequency TEXT DEFAULT 'daily',
   times TEXT[] DEFAULT '{}',
   instructions TEXT,
-  "isCritical" BOOLEAN DEFAULT FALSE,
-  "specificDays" INTEGER[],
+  iscritical BOOLEAN DEFAULT FALSE,
+  is_prescribed BOOLEAN DEFAULT FALSE,
+  prescribed_by TEXT,
+  duration_days INTEGER,
+  start_date DATE,
+  end_date DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -105,11 +115,11 @@ CREATE TABLE medications (
 ```sql
 CREATE TABLE medication_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "medicationId" UUID REFERENCES medications(id) ON DELETE CASCADE,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  medicationid UUID REFERENCES medications(id) ON DELETE CASCADE,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
   status TEXT CHECK (status IN ('taken', 'skipped', 'missed')) NOT NULL,
-  "scheduledTime" TEXT,
-  "takenAt" TIMESTAMPTZ DEFAULT NOW()
+  scheduledtime TEXT,
+  takenat TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -117,8 +127,8 @@ CREATE TABLE medication_logs (
 ```sql
 CREATE TABLE vitals (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  "heartRate" INTEGER,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  heartrate INTEGER,
   spo2 INTEGER,
   steps INTEGER,
   timestamp TIMESTAMPTZ DEFAULT NOW()
@@ -129,7 +139,7 @@ CREATE TABLE vitals (
 ```sql
 CREATE TABLE patient_locations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
   latitude DOUBLE PRECISION NOT NULL,
   longitude DOUBLE PRECISION NOT NULL,
   accuracy DOUBLE PRECISION,
@@ -141,10 +151,12 @@ CREATE TABLE patient_locations (
 ```sql
 CREATE TABLE fall_events (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
   latitude DOUBLE PRECISION,
   longitude DOUBLE PRECISION,
   confirmed BOOLEAN DEFAULT FALSE,
+  status TEXT DEFAULT 'unresolved',
+  resolved BOOLEAN DEFAULT FALSE,
   source TEXT DEFAULT 'foreground',
   timestamp TIMESTAMPTZ DEFAULT NOW()
 );
@@ -168,12 +180,36 @@ CREATE INDEX idx_direct_messages_chat_id ON direct_messages(chat_id);
 ```sql
 CREATE TABLE medical_details (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  "patientId" UUID REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
-  "bloodType" TEXT,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
+  bloodtype TEXT,
   allergies TEXT,
-  "chronicConditions" TEXT,
-  "currentMedications" TEXT,
+  chronicconditions TEXT,
+  currentmedications TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Symptom Logs
+```sql
+CREATE TABLE symptom_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  notes TEXT,
+  severity TEXT,
+  timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Clinical Records (for Gallery)
+```sql
+CREATE TABLE clinical_records (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  patientid UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'pending',
+  timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -194,6 +230,8 @@ ALTER TABLE patient_locations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fall_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE medical_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE symptom_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_records ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users can only see/edit their own
 CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
@@ -207,21 +245,21 @@ CREATE POLICY "Doctors can view linked patients" ON profiles FOR SELECT
   ));
 
 -- Patients manage their own data
-CREATE POLICY "Patients manage own medications" ON medications FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own logs" ON medication_logs FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own contacts" ON emergency_contacts FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own vitals" ON vitals FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own locations" ON patient_locations FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own fall events" ON fall_events FOR ALL USING (auth.uid() = "patientId");
-CREATE POLICY "Patients manage own medical details" ON medical_details FOR ALL USING (auth.uid() = "patientId");
+CREATE POLICY "Patients manage own medications" ON medications FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own logs" ON medication_logs FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own contacts" ON emergency_contacts FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own vitals" ON vitals FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own locations" ON patient_locations FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own fall events" ON fall_events FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Patients manage own medical details" ON medical_details FOR ALL USING (auth.uid() = patientid);
 
 -- Doctors can view their linked patients' data
 CREATE POLICY "Doctors view patient vitals" ON vitals FOR SELECT
-  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = vitals."patientId"));
+  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = vitals.patientid));
 CREATE POLICY "Doctors view patient locations" ON patient_locations FOR SELECT
-  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = patient_locations."patientId"));
+  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = patient_locations.patientid));
 CREATE POLICY "Doctors view patient medications" ON medications FOR SELECT
-  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = medications."patientId"));
+  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = medications.patientid));
 
 -- Doctor-patient links
 CREATE POLICY "Doctors manage own links" ON doctor_patient_links FOR ALL USING (auth.uid() = doctor_id);
@@ -229,6 +267,16 @@ CREATE POLICY "Doctors manage own links" ON doctor_patient_links FOR ALL USING (
 -- Chat: sender or receiver can access
 CREATE POLICY "Chat participants can access messages" ON direct_messages FOR ALL
   USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+-- Symptoms: Patient manage, Doctor view
+CREATE POLICY "Patients manage own symptom logs" ON symptom_logs FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Doctors view patient symptom logs" ON symptom_logs FOR SELECT 
+  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = symptom_logs.patientid));
+
+-- Clinical Records: Patient manage, Doctor view
+CREATE POLICY "Patients manage own clinical records" ON clinical_records FOR ALL USING (auth.uid() = patientid);
+CREATE POLICY "Doctors view patient clinical records" ON clinical_records FOR SELECT 
+  USING (EXISTS (SELECT 1 FROM doctor_patient_links WHERE doctor_id = auth.uid() AND patient_id = clinical_records.patientid));
 ```
 
 ---
@@ -281,11 +329,11 @@ const handleSave = async () => {
   const { error } = await supabase
     .from('medical_details')
     .upsert({
-      patientId: session?.user?.id,
-      bloodType: details.bloodType,
+      patientid: session?.user?.id,
+      bloodtype: details.bloodType,
       allergies: details.allergies,
-      chronicConditions: details.chronicConditions,
-      currentMedications: details.currentMedications,
+      chronicconditions: details.chronicConditions,
+      currentmedications: details.currentMedications,
     });
   if (error) alert(error.message);
   else { alert('Saved!'); router.replace('/(tabs)'); }

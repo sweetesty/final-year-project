@@ -179,6 +179,34 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const pickClinicalImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsEditing: true, quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      Alert.prompt(
+        'Add Description',
+        'Please describe what this photo shows (e.g. "Wound on left arm", "New prescription bottle").',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upload to Gallery',
+            onPress: async (desc?: string | { login: string; password: string }) => {
+              setIsUploading(true);
+              const record = await ChatService.uploadClinicalImage(result.assets[0].uri, userId, typeof desc === 'string' ? desc : 'Clinical photo');
+              setIsUploading(false);
+              if (record) {
+                // Also send as a message to notify the other party
+                handleSend(record.image_url, 'image');
+                Alert.alert('Saved', 'This photo has been added to your Clinical Gallery for doctor review.');
+              }
+            }
+          }
+        ]
+      );
+    }
+  };
+
   const handleRecord = async () => {
     try {
       if (recording) {
@@ -389,6 +417,12 @@ export default function ChatRoomScreen() {
             : <MaterialIcons name="add-photo-alternate" size={24} color={themeColors.tint} />
           }
         </TouchableOpacity>
+
+        {role === 'patient' && (
+          <TouchableOpacity style={styles.iconBtn} onPress={pickClinicalImage} disabled={isUploading}>
+            <MaterialIcons name="healing" size={24} color={themeColors.emergency} />
+          </TouchableOpacity>
+        )}
 
         <TextInput
           style={[styles.input, { color: themeColors.text }]}

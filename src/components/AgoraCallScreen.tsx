@@ -2,17 +2,30 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform, Alert,
 } from 'react-native';
-import {
-  createAgoraRtcEngine,
-  IRtcEngine,
-  ChannelProfileType,
-  ClientRoleType,
-  RtcSurfaceView,
-  VideoSourceType,
-} from 'react-native-agora';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+
+// Agora is a native module — not available in Expo Go.
+// We lazy-require it so the rest of the app doesn't crash when it's missing.
+let createAgoraRtcEngine: any = null;
+let ChannelProfileType: any = {};
+let ClientRoleType: any = {};
+let RtcSurfaceView: any = null;
+let VideoSourceType: any = {};
+let agoraAvailable = false;
+
+try {
+  const agora = require('react-native-agora');
+  createAgoraRtcEngine = agora.createAgoraRtcEngine;
+  ChannelProfileType = agora.ChannelProfileType;
+  ClientRoleType = agora.ClientRoleType;
+  RtcSurfaceView = agora.RtcSurfaceView;
+  VideoSourceType = agora.VideoSourceType;
+  agoraAvailable = true;
+} catch (_) {
+  // Running in Expo Go — Agora native module not linked
+}
 import { AgoraCallService, CallType } from '../services/AgoraCallService';
 
 interface Props {
@@ -31,7 +44,7 @@ export default function AgoraCallScreen({
   partnerName,
   onEnd,
 }: Props) {
-  const engine = useRef<IRtcEngine | null>(null);
+  const engine = useRef<any>(null);
 
   const [joined, setJoined] = useState(false);
   const [remoteUid, setRemoteUid] = useState<number | null>(null);
@@ -52,6 +65,16 @@ export default function AgoraCallScreen({
 
   // ── Agora setup ────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!agoraAvailable) {
+      // Running in Expo Go — show a friendly message instead of crashing
+      Alert.alert(
+        'Dev Build Required',
+        'Voice & video calls use Agora which requires a dev build.\n\nRun: npx expo run:ios',
+        [{ text: 'OK', onPress: onEnd }]
+      );
+      return;
+    }
+
     if (!AgoraCallService.APP_ID) {
       Alert.alert('Configuration Error', 'Agora App ID is not set. Add EXPO_PUBLIC_AGORA_APP_ID to your .env file.');
       onEnd();
@@ -144,7 +167,7 @@ export default function AgoraCallScreen({
   return (
     <Animated.View entering={FadeIn.duration(300)} style={StyleSheet.absoluteFill}>
       {/* Background: remote video or dark gradient */}
-      {isVideo && remoteUid != null ? (
+      {isVideo && remoteUid != null && RtcSurfaceView ? (
         <RtcSurfaceView
           canvas={{ uid: remoteUid, sourceType: VideoSourceType.VideoSourceRemote }}
           style={StyleSheet.absoluteFill}
@@ -157,7 +180,7 @@ export default function AgoraCallScreen({
       )}
 
       {/* Local video (PiP) */}
-      {isVideo && cameraOn && (
+      {isVideo && cameraOn && RtcSurfaceView && (
         <Animated.View entering={FadeInDown.duration(300)} style={styles.localVideo}>
           <RtcSurfaceView
             canvas={{ uid: 0, sourceType: VideoSourceType.VideoSourceCamera }}

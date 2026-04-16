@@ -21,7 +21,10 @@ export default function ClinicalProfileScreen() {
   const router = useRouter();
 
   const isDoctor = role === 'doctor';
-  const userName = session?.user?.user_metadata?.full_name || (isDoctor ? 'Medical Officer' : 'Patient');
+  const rawName = session?.user?.user_metadata?.full_name || (isDoctor ? 'Medical Officer' : 'Patient');
+  const userName = (isDoctor && rawName !== 'Medical Officer')
+    ? `Dr. ${rawName.replace(/^(Doctor|Dr\.?)\s+/i, '').split(' ')[0]}`
+    : rawName;
   const userEmail = session?.user?.email || (isDoctor ? 'doctor@hospital.com' : 'patient@vitalsfusion.com');
 
   const userId = session?.user?.id;
@@ -165,10 +168,9 @@ export default function ClinicalProfileScreen() {
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
           <ProfileItem icon="email" label="Primary Email" value={userEmail} />
           {isDoctor ? (
-            <>
-              <ProfileItem icon="badge" label={t('doctor.medical_id')} value="KNS-992-001" />
-              <ProfileItem icon="apartment" label={t('doctor.facility')} value="Vitals Fusion Health Center" />
-            </>
+            <TouchableOpacity onPress={() => router.push('/professional-details')}>
+              <ProfileItem icon="badge" label="Professional Portfolio" value="Manage Specialty & Bio" color={themeColors.tint} />
+            </TouchableOpacity>
           ) : (
             <>
               <TouchableOpacity onPress={() => router.push('/medical-details')}>
@@ -185,7 +187,10 @@ export default function ClinicalProfileScreen() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>{t('doctor.system_settings')}</Text>
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <TouchableOpacity style={[styles.profileItem, { borderBottomWidth: 0 }]}>
+          <TouchableOpacity 
+            style={[styles.profileItem, { borderBottomWidth: 0 }]}
+            onPress={() => router.push('/change-password')}
+          >
             <View style={[styles.iconBox, { backgroundColor: '#10B98115' }]}>
               <MaterialIcons name="security" size={22} color="#10B981" />
             </View>

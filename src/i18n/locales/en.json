@@ -2,6 +2,7 @@
   "common": {
     "emergency": "Emergency",
     "doctor": "My Doctor",
+    "messages": "Messages",
     "message": "Message Doctor",
     "chat": "Clinical Chat",
     "vitals": "Vitals",

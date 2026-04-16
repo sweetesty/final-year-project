@@ -1,6 +1,167 @@
 import { supabase } from './SupabaseService';
+import { NotificationService } from './NotificationService';
+
+export interface DoctorRequest {
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  type: 'connection' | 'message';
+  status: 'pending' | 'accepted' | 'rejected';
+  message?: string;
+  created_at: string;
+  profiles?: {
+    full_name: string;
+    avatar_url: string | null;
+    bio: string | null;
+    last_seen: string | null;
+  };
+}
 
 export class DoctorService {
+  /**
+   * Sends a connection or message request to a doctor.
+   */
+  static async sendConnectionRequest(
+    patientId: string,
+    doctorId: string,
+    type: 'connection' | 'message',
+    message?: string
+  ) {
+    // 1. Check for existing request (pending OR accepted)
+    const { data: existing } = await supabase
+      .from('doctor_requests')
+      .select('id, status')
+      .eq('patient_id', patientId)
+      .eq('doctor_id', doctorId)
+      .eq('type', type)
+      .in('status', ['pending', 'accepted'])
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.status === 'accepted') {
+        throw new Error(`You are already ${type === 'connection' ? 'connected with' : 'in a message thread with'} this doctor.`);
+      }
+      throw new Error(`You already have a pending ${type} request with this doctor.`);
+    }
+
+    // 2. Insert request
+    const { error } = await supabase
+      .from('doctor_requests')
+      .insert({
+        patient_id: patientId,
+        doctor_id: doctorId,
+        type,
+        message,
+        status: 'pending'
+      });
+
+    if (error) throw error;
+
+    // 3. Notify doctor
+    try {
+      const [{ data: patient }, { data: doctor }] = await Promise.all([
+        supabase.from('profiles').select('full_name').eq('id', patientId).single(),
+        supabase.from('profiles').select('push_token').eq('id', doctorId).single()
+      ]);
+
+      if (doctor?.push_token && patient?.full_name) {
+        const title = type === 'connection' ? '🤝 New Connection Request' : '💬 New Message Request';
+        const body = `${patient.full_name} wants to ${type === 'connection' ? 'link with you' : 'chat with you'}.`;
+        
+        await NotificationService.sendPushToToken(doctor.push_token, title, body, {
+          type: 'clinical_request',
+          requestId: type
+        });
+      }
+    } catch (e) {
+      console.warn('[DoctorService] Failed to send push notification for request:', e);
+    }
+  }
+
+  /**
+   * Fetches all pending requests for a doctor.
+   */
+  static async getPendingRequests(doctorId: string): Promise<DoctorRequest[]> {
+    const { data, error } = await supabase
+      .from('doctor_requests')
+      .select('*, profiles:patient_id(full_name, avatar_url, bio, last_seen)')
+      .eq('doctor_id', doctorId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as any;
+  }
+
+  /**
+   * Updates the status of a request.
+   */
+  static async updateRequestStatus(requestId: string, status: 'accepted' | 'rejected') {
+    const { error } = await supabase
+      .from('doctor_requests')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Fetches the medical profile summary for a patient (used during request review).
+   */
+  static async getPatientMedicalSnapshot(patientId: string) {
+    const { data, error } = await supabase
+      .from('medical_details')
+      .select('bloodtype, allergies, chronicconditions, currentmedications')
+      .eq('patientid', patientId)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Checks for an existing request or connection between a patient and doctor.
+   * Returns 'none', 'pending', or 'accepted'.
+   */
+  static async getRequestStatus(patientId: string, doctorId: string) {
+    // 1. Check for any non-rejected connection request
+    const { data: connRequest } = await supabase
+      .from('doctor_requests')
+      .select('status')
+      .eq('patient_id', patientId)
+      .eq('doctor_id', doctorId)
+      .eq('type', 'connection')
+      .neq('status', 'rejected')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 2. Check for any non-rejected message request
+    const { data: msgRequest } = await supabase
+      .from('doctor_requests')
+      .select('status')
+      .eq('patient_id', patientId)
+      .eq('doctor_id', doctorId)
+      .eq('type', 'message')
+      .neq('status', 'rejected')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 3. Check for clinical link
+    const { data: link } = await supabase
+      .from('doctor_patient_links')
+      .select('id')
+      .eq('patient_id', patientId)
+      .eq('doctor_id', doctorId)
+      .maybeSingle();
+
+    return {
+      connection: link ? 'accepted' : (connRequest?.status || 'none'),
+      message: msgRequest?.status || 'none'
+    };
+  }
+
   /**
    * Generates a unique 6-digit patient code if it doesn't exist.
    */
@@ -45,6 +206,17 @@ export class DoctorService {
 
     if (linkError) throw new Error("Already linked to this patient.");
     
+    // 3. Clear existing requests between this pair (Cleanup)
+    try {
+      await supabase
+        .from('doctor_requests')
+        .delete()
+        .eq('patient_id', patient.id)
+        .eq('doctor_id', doctorId);
+    } catch (e) {
+      console.warn('[DoctorService] Failed to clear connection requests after link:', e);
+    }
+
     return patient.id;
   }
 
@@ -72,7 +244,7 @@ export class DoctorService {
     // 3. Fetch the profiles for these patients (Manual Join)
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
-      .select('id, full_name, avatar_url, push_token')
+      .select('id, full_name, avatar_url, push_token, phone')
       .in('id', patientIds);
 
     if (profileError) {
@@ -95,22 +267,24 @@ export class DoctorService {
     console.log('[DoctorService] Checking clinical link for patient:', patientId);
     
     try {
-      // 1. Get the link record
-      const { data: link, error: linkError } = await supabase
+      // 1. Get the link records
+      const { data: links, error: linkError } = await supabase
         .from('doctor_patient_links')
         .select('doctor_id, patient_id')
-        .eq('patient_id', patientId)
-        .maybeSingle();
+        .eq('patient_id', patientId);
 
       if (linkError) {
         console.error('[DoctorService] Link fetch error:', linkError);
         return null;
       }
 
-      if (!link) {
+      if (!links || links.length === 0) {
         console.log('[DoctorService] No clinical link record found for this patient.');
         return null;
       }
+
+      // We return the first doctor found for single-doctor UI compatibility
+      const link = links[0];
 
       // 2. Fetch the doctor's profile (Manual Join)
       const { data: profile, error: profileError } = await supabase
@@ -129,6 +303,34 @@ export class DoctorService {
     } catch (e) {
       console.error('[DoctorService] Global fetch error for linked doctor:', e);
       return null;
+    }
+  }
+
+  /**
+   * Fetches ALL doctors linked to a patient.
+   */
+  static async getLinkedDoctors(patientId: string) {
+    console.log('[DoctorService] Checking ALL clinical links for patient:', patientId);
+    
+    try {
+      const { data: links, error: linkError } = await supabase
+        .from('doctor_patient_links')
+        .select('doctor_id')
+        .eq('patient_id', patientId);
+
+      if (linkError || !links || links.length === 0) return [];
+
+      const doctorIds = links.map(l => l.doctor_id);
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, role, phone, push_token, specialization')
+        .in('id', doctorIds);
+
+      if (profileError) throw profileError;
+      return profiles || [];
+    } catch (e) {
+      console.error('[DoctorService] Global fetch error for linked doctors:', e);
+      return [];
     }
   }
 

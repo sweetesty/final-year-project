@@ -54,10 +54,26 @@ export class OfflineSyncService {
     updateFilter?: { column: string; value: string }
   ): Promise<void> {
     const normalizedPayload = { ...payload };
-    if (normalizedPayload.patientId) { normalizedPayload.patientid = normalizedPayload.patientId; delete normalizedPayload.patientId; }
-    if (normalizedPayload.heartRate) { normalizedPayload.heartrate = normalizedPayload.heartRate; delete normalizedPayload.heartRate; }
     
-    let query;
+    // Robust Patient ID Normalization
+    if (normalizedPayload.patientId) { 
+      normalizedPayload.patientid = normalizedPayload.patientId; 
+      delete normalizedPayload.patientId; 
+    }
+    if (normalizedPayload.patient_id) { 
+      normalizedPayload.patientid = normalizedPayload.patient_id; 
+      delete normalizedPayload.patient_id; 
+    }
+
+    // Robust Vitals Normalization
+    if (normalizedPayload.heartRate) { 
+      normalizedPayload.heartrate = normalizedPayload.heartRate; 
+      delete normalizedPayload.heartRate; 
+    }
+    if (normalizedPayload.spo2Level) {
+      normalizedPayload.spo2 = normalizedPayload.spo2Level;
+      delete normalizedPayload.spo2Level;
+    }
     if (operation === 'insert') {
       query = supabase.from(table).insert(normalizedPayload);
     } else {

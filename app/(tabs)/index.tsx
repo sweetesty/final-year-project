@@ -433,16 +433,17 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity
               style={styles.codeStripBtn}
-              onPress={() => {
-                if (doctor) {
-                  router.push({ pathname: '/chat-room', params: { partnerId: doctor.id, partnerName: doctor.full_name } });
-                } else {
-                  router.push('/(tabs)/doctor');
-                }
-              }}
+              onPress={() => router.push('/(tabs)/clinical-messages')}
             >
-              <MaterialIcons name={doctor ? "chat" : "person-search"} size={16} color="#fff" />
-              <Text style={styles.codeStripBtnText}>{doctor ? t('common.message') : 'Find Doctor'}</Text>
+              <MaterialIcons name="chat" size={16} color="#fff" />
+              <Text style={styles.codeStripBtnText}>{t('common.messages')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.codeStripBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]}
+              onPress={() => router.push('/my-requests')}
+            >
+              <MaterialIcons name="history" size={16} color="#fff" />
+              <Text style={styles.codeStripBtnText}>Status</Text>
             </TouchableOpacity>
           </Animated.View>
         </LinearGradient>

@@ -67,7 +67,17 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
       .gte('takenat', startOfDay.toISOString()); 
 
     if (error) console.error('[MedicationViewModel] Logs error:', error);
-    else setTodayLogs(data || []);
+    else {
+      const mapped = (data || []).map((l: any) => ({
+        id: l.id,
+        medicationId: l.medicationid,
+        patientId: l.patientid,
+        status: l.status,
+        scheduledTime: l.scheduledtime,
+        takenAt: l.takenat
+      }));
+      setTodayLogs(mapped);
+    }
   }, [patientId]);
 
   // Calculations for summary stats
@@ -75,8 +85,8 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
     const schedule = medications.flatMap(med =>
       med.times.map(time => {
         const log = todayLogs.find(l => 
-          (l.medicationid === med.id || l.medicationId === med.id) && 
-          (l.scheduledtime === time || l.scheduledTime === time)
+          l.medicationId === med.id && 
+          l.scheduledTime === time
         );
         return {
           medId: med.id,
@@ -202,18 +212,20 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
       if (status === 'skipped') {
         const med = medications.find(m => m.id === medicationId);
         if (med) {
-          const doctor = await DoctorService.getLinkedDoctor(patientId);
+          const doctors = await DoctorService.getLinkedDoctors(patientId);
           const caregivers = await CaregiverService.getLinkedCaregivers(patientId);
           const displayName = patientName || 'A patient';
 
-          if (doctor?.push_token) {
-            await NotificationService.sendPushToToken(
-              doctor.push_token,
-              'Medication Skipped',
-              `${displayName} just skipped their scheduled dose of ${med.name}.`,
-              { type: 'med_skipped', patientId }
-            );
-          }
+          await Promise.all(doctors.map(async (doc) => {
+            if (doc?.push_token) {
+              await NotificationService.sendPushToToken(
+                doc.push_token,
+                'Medication Skipped',
+                `${displayName} just skipped their scheduled dose of ${med.name}.`,
+                { type: 'med_skipped', patientId }
+              );
+            }
+          }));
 
           for (const cg of caregivers) {
             if (cg.push_token) {
@@ -240,13 +252,12 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
     
     // 1. Get contact info (emergency and doctor)
     const { data: profile } = await supabase.from('profiles').select('emergency_contact_phone').eq('id', patientId).single();
-    const doctor = await DoctorService.getLinkedDoctor(patientId);
+    const doctors = await DoctorService.getLinkedDoctors(patientId);
     const caregivers = await CaregiverService.getLinkedCaregivers(patientId);
 
     const emergencyPhone = profile?.emergency_contact_phone;
-    const doctorPhone = doctor?.phone;
 
-    if (!emergencyPhone && !doctorPhone && caregivers.length === 0) return;
+    if (!emergencyPhone && doctors.length === 0 && caregivers.length === 0) return;
 
     for (const med of medications) {
       if (!med.isCritical) continue;
@@ -261,14 +272,26 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
         // If it's more than 30 mins late but less than 4 hours (to avoid spamming old ones)
         if (diffMinutes > 30 && diffMinutes < 240) {
           const log = todayLogs.find(l => 
-            (l.medicationid === med.id || l.medicationId === med.id) && 
-            (l.scheduledtime === time || l.scheduledTime === time)
+            l.medicationId === med.id && 
+            l.scheduledTime === time
           );
 
           if (!log) {
             console.warn(`[Escalation] Critical med ${med.name} missed at ${time}`);
             if (emergencyPhone) await SmsService.sendEmergencyEscalation(emergencyPhone, displayName, med.name);
-            if (doctorPhone) await SmsService.sendEmergencyEscalation(doctorPhone, displayName, med.name);
+            
+            // Notify all linked doctors via SMS if possible, or push
+            for (const doc of doctors) {
+              if (doc.phone) await SmsService.sendEmergencyEscalation(doc.phone, displayName, med.name);
+              if (doc.push_token) {
+                await NotificationService.sendPushToToken(
+                  doc.push_token,
+                  '🚨 Critical Medication Missed',
+                  `${displayName} missed their scheduled ${med.name}. Please check on them.`,
+                  { type: 'emergency_med', patientId }
+                );
+              }
+            }
 
             // Notify all linked caregivers
             for (const cg of caregivers) {
@@ -328,7 +351,7 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
         fetchMedications();
       })
       .on('postgres_changes', {
-        event: 'ALL', // Watch all changes for summary updates
+        event: '*', // Watch all changes for summary updates
         schema: 'public',
         table: 'medication_logs',
         filter: `patientid=eq.${patientId}`,

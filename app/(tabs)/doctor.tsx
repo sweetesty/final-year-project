@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -212,7 +212,7 @@ const SPECIALTIES = [
 ];
 
 // ─── Patient-facing Find Doctor screen ───────────────────────────────────────
-function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, themeColors, isDark, t }: any) {
+function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router, themeColors, isDark, t }: any) {
   const mapRef = useRef<MapView>(null);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [nearbyDoctors, setNearbyDoctors] = useState<any[]>([]);
@@ -362,9 +362,16 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
               </View>
               <TouchableOpacity
                 style={styles.calloutChatBtn}
-                onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedMarker.id, partnerName: selectedMarker.full_name } })}
+                onPress={() => router.push({ 
+                  pathname: '/doctor-public-profile', 
+                  params: { 
+                    id: selectedMarker.id, 
+                    full_name: selectedMarker.full_name,
+                    specialization: selectedMarker.specialization || 'Clinical Specialist'
+                  } 
+                })}
               >
-                <MaterialIcons name="chat" size={16} color="#fff" />
+                <MaterialIcons name="person-search" size={16} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.calloutClose} onPress={() => setSelectedMarker(null)}>
                 <MaterialIcons name="close" size={16} color="rgba(255,255,255,0.5)" />
@@ -423,7 +430,7 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
 
         {/* Results count */}
         <Text style={[styles.resultsLabel, { color: themeColors.muted }]}>
-          {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} found
+          {linkedDoctors.length > 0 ? `Your Connected Doctors (${linkedDoctors.length})` : `${filteredDoctors.length} ${filteredDoctors.length === 1 ? 'doctor' : 'doctors'} found`}
           {activeFilter !== 'All' ? ` · ${activeFilter}` : ''}
         </Text>
 
@@ -441,13 +448,18 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
               </Text>
             </View>
           }
-          renderItem={({ item: doc, index }: any) => (
-            <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
-              <TouchableOpacity
-                style={[styles.docCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
-                onPress={() => focusDoctor(doc)}
-                activeOpacity={0.85}
-              >
+          renderItem={({ item: doc, index }: any) => {
+            const isLinked = linkedDoctors.some((ld: any) => ld.id === doc.id);
+            return (
+              <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
+                <TouchableOpacity
+                  style={[
+                    styles.docCard, 
+                    { backgroundColor: themeColors.card, borderColor: isLinked ? themeColors.tint : themeColors.border }
+                  ]}
+                  onPress={() => focusDoctor(doc)}
+                  activeOpacity={0.85}
+                >
                 {/* Avatar — show profile image if available, else gradient initials */}
                 {doc.avatar_url ? (
                   <Image
@@ -472,6 +484,12 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                         <Text style={styles.onlinePillText}>Online</Text>
                       </View>
                     )}
+                    {isLinked && (
+                      <View style={[styles.onlinePill, { backgroundColor: themeColors.tint + '20' }]}>
+                        <MaterialIcons name="verified" size={10} color={themeColors.tint} />
+                        <Text style={[styles.onlinePillText, { color: themeColors.tint }]}>Linked</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={[styles.docSpec, { color: themeColors.muted }]} numberOfLines={1}>
                     {doc.specialization || 'Clinical Specialist'}
@@ -482,13 +500,21 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 {/* Actions */}
                 <TouchableOpacity
                   style={[styles.docChatBtn, { backgroundColor: themeColors.tint }]}
-                  onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: doc.id, partnerName: doc.full_name } })}
+                  onPress={() => router.push({ 
+                    pathname: '/doctor-public-profile', 
+                    params: { 
+                      id: doc.id, 
+                      full_name: doc.full_name,
+                      specialization: doc.specialization || 'Clinical Specialist'
+                    } 
+                  })}
                 >
-                  <MaterialIcons name="chat" size={16} color="#fff" />
+                  <MaterialIcons name="person-search" size={16} color="#fff" />
                 </TouchableOpacity>
               </TouchableOpacity>
             </Animated.View>
-          )}
+          );
+        }}
         />
       </View>
 
@@ -513,15 +539,26 @@ export default function DoctorDashboard() {
   const isDark = colorScheme === 'dark';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { session, role } = useAuthViewModel();
   const { t } = useTranslation();
 
-  const [doctor, setDoctor] = useState<any>(null);
+  const [doctors, setDoctors] = useState<any[]>([]);
   const [allDoctors, setAllDoctors] = useState<any[]>([]);
   const [linkedPatients, setLinkedPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [healthSummary, setHealthSummary] = useState<string | null>(null);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+
+  // Deep linking logic: Auto-select patient from params
+  useEffect(() => {
+    if (params.patientId && linkedPatients.length > 0) {
+      const p = linkedPatients.find(lp => lp.id === params.patientId);
+      if (p) {
+        setSelectedPatient(p);
+      }
+    }
+  }, [params.patientId, linkedPatients]);
 
   // Fetch patient meds for clinical review
   const { medications: patientMeds, summary: medSummary } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
@@ -545,13 +582,13 @@ export default function DoctorDashboard() {
   const loadDoctor = async () => {
     setLoading(true);
     try {
-      const [d, doctors, code] = await Promise.all([
-        DoctorService.getLinkedDoctor(session!.user.id),
+      const [linkedDocs, allDocs, code] = await Promise.all([
+        DoctorService.getLinkedDoctors(session!.user.id),
         DoctorService.getAllDoctors(),
         DoctorService.ensurePatientCode(session!.user.id),
       ]);
-      setDoctor(d);
-      setAllDoctors(doctors); // always populate — map needs doctors regardless of link status
+      setDoctors(linkedDocs);
+      setAllDoctors(allDocs); // always populate — map needs doctors regardless of link status
       setMyCode(code);
     } catch (e) {
       console.error(e);
@@ -615,7 +652,10 @@ export default function DoctorDashboard() {
       return;
     }
 
-    const doctorName = session?.user?.user_metadata?.full_name || 'Your Doctor';
+    const rawName = session?.user?.user_metadata?.full_name || 'Your Doctor';
+    const doctorName = rawName === 'Your Doctor' 
+      ? rawName 
+      : `Dr. ${rawName.replace(/^(Doctor|Dr\.?)\s+/i, '').split(' ')[0]}`;
     
     try {
       await NotificationService.sendPushToToken(
@@ -668,7 +708,7 @@ export default function DoctorDashboard() {
     return (
       <PatientDoctorView
         allDoctors={allDoctors}
-        linkedDoctor={doctor}
+        linkedDoctors={doctors}
         myCode={myCode}
         session={session}
         router={router}

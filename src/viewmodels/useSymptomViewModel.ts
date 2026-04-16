@@ -48,25 +48,28 @@ export const useSymptomViewModel = (patientId: string, patientName?: string) => 
       throw error;
     }
 
-    // 2. Notify Doctor (Non-blocking)
-    const notifyDoctor = async () => {
+    // 2. Notify All Linked Doctors (Non-blocking)
+    const notifyDoctors = async () => {
       try {
-        const doctor = await DoctorService.getLinkedDoctor(patientId);
-        if (doctor?.push_token) {
-          const displayName = patientName || 'A patient';
-          await NotificationService.sendPushToToken(
-            doctor.push_token,
-            `👨‍⚕️ Health Update: ${displayName}`,
-            `${displayName} reported feeling ${type.toLowerCase()} (${severity || 'moderate'}).`,
-            { type: 'symptom_report', patientId }
-          );
-        }
+        const doctors = await DoctorService.getLinkedDoctors(patientId);
+        const displayName = patientName || 'A patient';
+        
+        await Promise.all(doctors.map(async (doc) => {
+          if (doc?.push_token) {
+            await NotificationService.sendPushToToken(
+              doc.push_token,
+              `👨‍⚕️ Health Update: ${displayName}`,
+              `${displayName} reported feeling ${type.toLowerCase()} (${severity || 'moderate'}).`,
+              { type: 'symptom_report', patientId }
+            );
+          }
+        }));
       } catch (e) {
         console.warn('[useSymptomViewModel] Push notification failed:', e);
       }
     };
 
-    notifyDoctor().catch(() => {});
+    notifyDoctors().catch(() => {});
     await fetchLogs();
   };
 

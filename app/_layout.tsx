@@ -132,6 +132,9 @@ export default function RootLayout() {
         <Stack.Screen name="live-tracking" options={{ title: t('nav.live_location') }} />
         <Stack.Screen name="chat-room" options={{ title: t('nav.clinical_chat') }} />
         <Stack.Screen name="nearby-doctors" options={{ headerShown: false }} />
+        <Stack.Screen name="doctor-public-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="connection-requests" options={{ headerShown: false }} />
+        <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

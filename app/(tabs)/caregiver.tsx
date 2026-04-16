@@ -131,122 +131,198 @@ export default function CaregiverDashboard() {
   // If a patient is selected, show their specific details
   if (selectedPatient) {
     const isEmergency = activeAlerts.includes(selectedPatient.id);
+    const adherencePct = medSummary.totalToday > 0
+      ? Math.round((medSummary.takenCount / medSummary.totalToday) * 100)
+      : 100;
 
     return (
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        
-        <View style={[styles.headerPane, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+
+        {/* ── Header gradient ── */}
+        <LinearGradient
+          colors={isEmergency ? ['#7f1d1d', '#450a0a'] : ['#0c4a6e', '#0369a1']}
+          style={styles.detailHeader}
+        >
           <TouchableOpacity onPress={() => setSelectedPatient(null)} style={styles.backBtn}>
-            <MaterialIcons name="arrow-back-ios" size={20} color={themeColors.text} />
+            <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <Text style={[styles.headerTitle, { color: themeColors.text }]}>{selectedPatient.full_name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <View style={[styles.statusDot, { backgroundColor: isEmergency ? '#EF4444' : '#10B981' }]} />
-              <Text style={{ fontSize: 12, color: isEmergency ? '#EF4444' : themeColors.muted, fontWeight: '800' }}>
-                {isEmergency ? '⚠️ FALL DETECTED' : 'MONITORING'}
+            <Text style={styles.detailHeaderName}>{selectedPatient.full_name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={[styles.statusDot, { backgroundColor: isEmergency ? '#FCA5A5' : '#34D399' }]} />
+              <Text style={[styles.detailHeaderStatus, { color: isEmergency ? '#FCA5A5' : '#34D399' }]}>
+                {isEmergency ? 'FALL DETECTED' : 'MONITORING ACTIVE'}
               </Text>
             </View>
           </View>
           <TouchableOpacity onPress={navigateToTracking} style={styles.mapBtn}>
-            <MaterialIcons name="map" size={22} color={themeColors.tint} />
+            <MaterialIcons name="my-location" size={20} color="#fff" />
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+          {/* Emergency banner */}
           {isEmergency && (
             <Animated.View entering={FadeInUp} style={styles.emergencyBanner}>
-              <MaterialIcons name="warning" size={20} color="#fff" />
-              <Text style={styles.emergencyText}>Unresolved Fall Detected! Verification In-Progress.</Text>
+              <MaterialIcons name="warning" size={18} color="#fff" />
+              <Text style={styles.emergencyText}>Unresolved fall! Please check on them immediately.</Text>
             </Animated.View>
           )}
 
-          {/* Quick Actions */}
+          {/* Quick action tiles */}
           <View style={styles.actionRow}>
-             <TouchableOpacity style={[styles.subAction, { backgroundColor: themeColors.card }]} onPress={navigateToTracking}>
-                <MaterialIcons name="my-location" size={24} color="#6366F1" />
-                <Text style={[styles.subActionText, { color: themeColors.text }]}>Live Tracking</Text>
-             </TouchableOpacity>
-             <TouchableOpacity style={[styles.subAction, { backgroundColor: themeColors.card }]} onPress={() => router.push({ pathname: '/emergency-contacts', params: { patientId: selectedPatient.id } })}>
-                <MaterialIcons name="contact-phone" size={24} color="#EF4444" />
-                <Text style={[styles.subActionText, { color: themeColors.text }]}>Contacts</Text>
-             </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionTile, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]} onPress={navigateToTracking}>
+              <View style={[styles.actionTileIcon, { backgroundColor: '#DBEAFE' }]}>
+                <MaterialIcons name="my-location" size={22} color="#2563EB" />
+              </View>
+              <Text style={[styles.actionTileLabel, { color: '#1E40AF' }]}>Live GPS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionTile, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}
+              onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedPatient.id, partnerName: selectedPatient.full_name } })}
+            >
+              <View style={[styles.actionTileIcon, { backgroundColor: '#FFEDD5' }]}>
+                <MaterialIcons name="chat-bubble-outline" size={22} color="#EA580C" />
+              </View>
+              <Text style={[styles.actionTileLabel, { color: '#C2410C' }]}>Message</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionTile, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}
+              onPress={() => router.push({ pathname: '/emergency-contacts', params: { patientId: selectedPatient.id } })}
+            >
+              <View style={[styles.actionTileIcon, { backgroundColor: '#FEE2E2' }]}>
+                <MaterialIcons name="contact-phone" size={22} color="#DC2626" />
+              </View>
+              <Text style={[styles.actionTileLabel, { color: '#B91C1C' }]}>Contacts</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Medication Compliance Summary */}
-          <ClinicalCard title="📊 Daily Compliance" theme={themeColors}>
-             <View style={styles.medSummaryGrid}>
-                <View style={[styles.medSummaryMain, { borderRightColor: themeColors.border }]}>
-                   <Text style={[styles.sectionLabel, { color: themeColors.muted }]}>NEXT DUE</Text>
-                   {medSummary.upcomingDose ? (
-                     <>
-                       <Text style={[styles.upcomingTime, { color: themeColors.tint }]}>{medSummary.upcomingDose.time}</Text>
-                       <Text style={[styles.upcomingMed, { color: themeColors.text }]} numberOfLines={1}>{medSummary.upcomingDose.name}</Text>
-                     </>
-                   ) : (
-                     <>
-                       <Text style={[styles.upcomingTime, { color: '#10B981' }]}>Done</Text>
-                       <Text style={[styles.upcomingMed, { color: themeColors.muted }]}>All doses taken</Text>
-                     </>
-                   )}
-                </View>
-                <View style={styles.medSummaryStats}>
-                   <StatMini label="Taken" value={medSummary.takenCount} color="#10B981" icon="check-circle" />
-                   <StatMini label="Missed" value={medSummary.missedCount} color="#EF4444" icon="cancel" />
-                   <StatMini label="Left" value={medSummary.pendingCount} color="#6366F1" icon="schedule" />
-                </View>
-             </View>
-             
-             {medSummary.totalToday > 0 && (
-               <View style={styles.progressTrack}>
-                  <View style={[styles.progressBar, { width: `${(medSummary.takenCount / medSummary.totalToday) * 100}%`, backgroundColor: '#10B981' }]} />
-               </View>
-             )}
-          </ClinicalCard>
+          {/* Medication compliance card */}
+          <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardIconBadge}>
+                <MaterialIcons name="medication" size={16} color="#6366F1" />
+              </View>
+              <Text style={[styles.cardHeading, { color: themeColors.text }]}>Daily Compliance</Text>
+              <View style={[styles.pctBadge, { backgroundColor: adherencePct >= 80 ? '#D1FAE5' : '#FEF3C7' }]}>
+                <Text style={[styles.pctBadgeText, { color: adherencePct >= 80 ? '#065F46' : '#92400E' }]}>{adherencePct}%</Text>
+              </View>
+            </View>
 
-          {/* Emergency History */}
-          <ClinicalCard title="🚨 Emergency Alerts" theme={themeColors}>
-             {history.length === 0 ? (
-               <Text style={{ color: themeColors.muted, fontSize: 13, fontStyle: 'italic', paddingVertical: 10 }}>No past emergency events.</Text>
-             ) : (
-               history.slice(0, 5).map(h => (
-                 <View key={h.id} style={styles.historyItem}>
-                    <View style={[styles.historyDot, { backgroundColor: h.status === 'resolved' ? '#10B981' : '#EF4444' }]} />
+            {/* Progress bar */}
+            <View style={[styles.progressTrack, { marginBottom: 16 }]}>
+              <View style={[styles.progressBar, {
+                width: `${adherencePct}%`,
+                backgroundColor: adherencePct >= 80 ? '#10B981' : '#F59E0B',
+              }]} />
+            </View>
+
+            <View style={styles.statsRow}>
+              {[
+                { label: 'Taken',   value: medSummary.takenCount,   color: '#10B981', bg: '#D1FAE5', icon: 'check-circle' },
+                { label: 'Missed',  value: medSummary.missedCount,  color: '#EF4444', bg: '#FEE2E2', icon: 'cancel' },
+                { label: 'Pending', value: medSummary.pendingCount, color: '#6366F1', bg: '#E0E7FF', icon: 'schedule' },
+              ].map(s => (
+                <View key={s.label} style={[styles.statChip, { backgroundColor: s.bg }]}>
+                  <MaterialIcons name={s.icon as any} size={16} color={s.color} />
+                  <Text style={[styles.statChipNum, { color: s.color }]}>{s.value}</Text>
+                  <Text style={[styles.statChipLabel, { color: s.color }]}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {medSummary.upcomingDose && (
+              <View style={[styles.nextDoseRow, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}>
+                <MaterialIcons name="alarm" size={16} color="#6366F1" />
+                <Text style={[styles.nextDoseText, { color: themeColors.text }]}>
+                  Next: <Text style={{ fontWeight: '800', color: '#6366F1' }}>{medSummary.upcomingDose.name}</Text> at {medSummary.upcomingDose.time}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Emergency history */}
+          <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <View style={[styles.cardIconBadge, { backgroundColor: '#FEE2E2' }]}>
+                <MaterialIcons name="warning" size={16} color="#EF4444" />
+              </View>
+              <Text style={[styles.cardHeading, { color: themeColors.text }]}>Emergency Alerts</Text>
+              <View style={[styles.pctBadge, { backgroundColor: history.length > 0 ? '#FEE2E2' : '#D1FAE5' }]}>
+                <Text style={[styles.pctBadgeText, { color: history.length > 0 ? '#B91C1C' : '#065F46' }]}>{history.length}</Text>
+              </View>
+            </View>
+            {history.length === 0 ? (
+              <View style={styles.emptyStateRow}>
+                <MaterialIcons name="check-circle-outline" size={28} color="#10B981" />
+                <Text style={[styles.emptyStateText, { color: themeColors.muted }]}>No past emergency events</Text>
+              </View>
+            ) : (
+              history.slice(0, 5).map((h, i) => {
+                const resolved = h.status === 'resolved';
+                return (
+                  <View key={h.id} style={[styles.historyItem, i === history.slice(0,5).length - 1 && { borderBottomWidth: 0 }]}>
+                    <View style={[styles.historyIconWrap, { backgroundColor: resolved ? '#D1FAE5' : '#FEE2E2' }]}>
+                      <MaterialIcons name={resolved ? 'check' : 'warning'} size={14} color={resolved ? '#10B981' : '#EF4444'} />
+                    </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.historyType, { color: themeColors.text }]}>{h.source === 'foreground' ? 'Fall Detected' : 'Triggered Alert'}</Text>
-                      <Text style={[styles.historyTime, { color: themeColors.muted }]}>{new Date(h.timestamp).toLocaleDateString()} at {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                      <Text style={[styles.historyType, { color: themeColors.text }]}>
+                        {h.source === 'foreground' ? 'Fall Detected' : 'Triggered Alert'}
+                      </Text>
+                      <Text style={[styles.historyTime, { color: themeColors.muted }]}>
+                        {new Date(h.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })} · {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
                     </View>
-                    <View style={[styles.statusTag, { backgroundColor: h.status === 'resolved' ? '#10B98120' : '#EF444420' }]}>
-                       <Text style={{ fontSize: 10, fontWeight: '800', color: h.status === 'resolved' ? '#10B981' : '#EF4444' }}>{h.status?.toUpperCase() || 'UNRESOLVED'}</Text>
+                    <View style={[styles.statusTag, { backgroundColor: resolved ? '#D1FAE5' : '#FEE2E2' }]}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: resolved ? '#065F46' : '#B91C1C' }}>
+                        {resolved ? 'RESOLVED' : 'OPEN'}
+                      </Text>
                     </View>
-                 </View>
-               ))
-             )}
-          </ClinicalCard>
+                  </View>
+                );
+              })
+            )}
+          </View>
 
-          {/* Full Schedule List */}
-          <ClinicalCard title="💊 Medication Schedule" theme={themeColors}>
-             <View style={styles.medicationList}>
-               {patientMeds.length === 0 ? (
-                 <Text style={[styles.emptyText, { color: themeColors.muted }]}>No active medications.</Text>
-               ) : (
-                 medSummary.fullSchedule.map((item, idx) => (
-                   <View key={`${item.medId}-${idx}`} style={[styles.medItem, { borderBottomColor: themeColors.border }]}>
-                     <View style={{ flex: 1 }}>
-                       <Text style={[styles.medNameSmall, { color: themeColors.text }]}>{item.name}</Text>
-                       <Text style={[styles.medSub, { color: themeColors.muted }]}>{item.time} • Daily</Text>
-                     </View>
-                     <View style={[styles.statusTag, { backgroundColor: item.status === 'taken' ? '#10B98115' : 'rgba(0,0,0,0.05)' }]}>
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: item.status === 'taken' ? '#10B981' : themeColors.muted }}>
-                          {item.status.toUpperCase()}
-                        </Text>
-                     </View>
-                   </View>
-                 ))
-               )}
-             </View>
-          </ClinicalCard>
+          {/* Medication schedule */}
+          <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginBottom: 40 }]}>
+            <View style={styles.cardHeaderRow}>
+              <View style={[styles.cardIconBadge, { backgroundColor: '#E0E7FF' }]}>
+                <MaterialIcons name="medication" size={16} color="#6366F1" />
+              </View>
+              <Text style={[styles.cardHeading, { color: themeColors.text }]}>Medication Schedule</Text>
+            </View>
+            {patientMeds.length === 0 ? (
+              <View style={styles.emptyStateRow}>
+                <MaterialIcons name="info-outline" size={24} color={themeColors.muted} />
+                <Text style={[styles.emptyStateText, { color: themeColors.muted }]}>No active medications</Text>
+              </View>
+            ) : (
+              medSummary.fullSchedule.map((item, idx) => {
+                const taken = item.status === 'taken';
+                const missed = item.status === 'missed';
+                return (
+                  <View key={`${item.medId}-${idx}`} style={[styles.medItem, { borderBottomColor: themeColors.border }, idx === medSummary.fullSchedule.length - 1 && { borderBottomWidth: 0 }]}>
+                    <View style={[styles.medDot, { backgroundColor: taken ? '#10B981' : missed ? '#EF4444' : '#94A3B8' }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.medNameSmall, { color: themeColors.text }]}>{item.name}</Text>
+                      <Text style={[styles.medSub, { color: themeColors.muted }]}>{item.time}</Text>
+                    </View>
+                    <View style={[styles.statusTag, {
+                      backgroundColor: taken ? '#D1FAE5' : missed ? '#FEE2E2' : themeColors.background,
+                    }]}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: taken ? '#065F46' : missed ? '#B91C1C' : themeColors.muted }}>
+                        {item.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+
         </ScrollView>
       </View>
     );
@@ -454,4 +530,44 @@ const styles = StyleSheet.create({
   darkEmptyTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
   darkEmptySubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
   sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
+
+  // Detail view — header
+  detailHeader: { paddingTop: 56, paddingBottom: 20, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  detailHeaderName: { fontSize: 20, fontWeight: '900', color: '#fff' },
+  detailHeaderStatus: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+
+  // Quick action tiles
+  actionTile: { flex: 1, borderRadius: 16, borderWidth: 1, padding: 14, alignItems: 'center', gap: 8 },
+  actionTileIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  actionTileLabel: { fontSize: 12, fontWeight: '700' },
+
+  // Generic card
+  card: { borderRadius: 20, borderWidth: 1, padding: 16, marginBottom: 16 },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  cardIconBadge: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#EDE9FE', justifyContent: 'center', alignItems: 'center' },
+  cardHeading: { flex: 1, fontSize: 15, fontWeight: '800' },
+
+  // Percentage badge
+  pctBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  pctBadgeText: { fontSize: 13, fontWeight: '900' },
+
+  // Stat chips row
+  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  statChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, padding: 10, borderRadius: 12 },
+  statChipNum: { fontSize: 16, fontWeight: '900' },
+  statChipLabel: { fontSize: 11, fontWeight: '700' },
+
+  // Next dose row
+  nextDoseRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, padding: 12 },
+  nextDoseText: { flex: 1, fontSize: 13, fontWeight: '600' },
+
+  // History icon circles
+  historyIconWrap: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+
+  // Empty states
+  emptyStateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 16, justifyContent: 'center' },
+  emptyStateText: { fontSize: 14, fontWeight: '600' },
+
+  // Med dot
+  medDot: { width: 10, height: 10, borderRadius: 5, marginRight: 4 },
 });

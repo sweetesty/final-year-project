@@ -20,7 +20,8 @@
         "NSCameraUsageDescription": "Allow Vitals Fusion to use the camera for video consultations.",
         "NSMicrophoneUsageDescription": "Allow Vitals Fusion to use the microphone for voice and video consultations."
       },
-      "bundleIdentifier": "com.nathanakin.finalyearproject"
+      "bundleIdentifier": "com.nathanakin.finalyearproject",
+      "appleTeamId": "87ZGXK2YP3"
     },
     "android": {
       "adaptiveIcon": {

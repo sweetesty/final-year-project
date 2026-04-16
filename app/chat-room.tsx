@@ -18,7 +18,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { AudioMessage } from '@/src/components/AudioMessage';
 import { Image } from 'expo-image';
-import { ConsultationService } from '@/src/services/ConsultationService';
+import AgoraCallScreen from '@/src/components/AgoraCallScreen';
+import { AgoraCallService, CallType } from '@/src/services/AgoraCallService';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,6 @@ export default function ChatRoomScreen() {
       try {
         const msgs = await ChatService.getMessages(chatId);
         setMessages(msgs);
-        // Mark received messages as read
         await ChatService.markAsRead(chatId, userId);
       } catch (err) {
         console.error(err);
@@ -111,25 +111,21 @@ export default function ChatRoomScreen() {
     };
     load();
 
-    // New message subscription
     const msgSub = ChatService.subscribeToChat(chatId, (newMsg) => {
       setMessages(prev => {
         if (prev.find(m => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      // Mark as read immediately if it's a received message
       if (newMsg.receiver_id === userId) {
         ChatService.markAsRead(chatId, userId);
       }
     });
 
-    // Read receipt subscription
     const readSub = ChatService.subscribeToReadReceipts(chatId, userId, (ids) => {
       setReadMessageIds(prev => new Set([...prev, ...ids]));
     });
 
-    // Presence
     const checkPresence = async () => {
       const { data } = await supabase.from('profiles').select('last_seen').eq('id', partnerId).single();
       updatePresence(data?.last_seen ?? null);
@@ -150,7 +146,22 @@ export default function ChatRoomScreen() {
     };
   }, [chatId, session, userId, partnerId, updatePresence]);
 
-  const [callDuration, setCallDuration] = useState(0);
+  // ── Call state ─────────────────────────────────────────────────────────────
+  const [activeCall, setActiveCall] = useState<{ type: CallType; channel: string } | null>(null);
+
+  const startCall = async (type: CallType) => {
+    if (!userId || !partnerId) return;
+    const channel = AgoraCallService.getChannelName(userId, partnerId);
+    AgoraCallService.notifyCallee({
+      channelName: channel,
+      callType: type,
+      callerId: userId,
+      callerName: session?.user?.user_metadata?.full_name ?? 'Unknown',
+      calleeId: partnerId,
+      calleeName: partnerName ?? 'User',
+    }).catch(() => {});
+    setActiveCall({ type, channel });
+  };
 
   // ── Media ──────────────────────────────────────────────────────────────────
 
@@ -183,7 +194,6 @@ export default function ChatRoomScreen() {
               const record = await ChatService.uploadClinicalImage(result.assets[0].uri, userId, typeof desc === 'string' ? desc : 'Clinical photo');
               setIsUploading(false);
               if (record) {
-                // Also send as a message to notify the other party
                 handleSend(record.image_url, 'image');
                 Alert.alert('Saved', 'This photo has been added to your Clinical Gallery for doctor review.');
               }
@@ -251,7 +261,6 @@ export default function ChatRoomScreen() {
   // ── Render message ─────────────────────────────────────────────────────────
 
   const renderItem = ({ item }: { item: ChatItem }) => {
-    // Date separator
     if ('type' in item && item.type === 'date_separator') {
       return (
         <View style={styles.dateSepRow}>
@@ -281,7 +290,6 @@ export default function ChatRoomScreen() {
           (isImageOnly || isAudio) && { padding: isAudio ? 10 : 0, overflow: 'hidden', backgroundColor: isAudio ? (isMe ? themeColors.tint : themeColors.card) : 'transparent' },
         ]}
       >
-        {/* Image */}
         {isImageOnly && (
           <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedImage(msg.attachment_url!)}>
             <View style={styles.imageBubbleWrap}>
@@ -293,12 +301,10 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Audio */}
         {isAudio && (
           <AudioMessage uri={msg.attachment_url!} isMe={isMe} timestamp={formatTimestamp(msg.timestamp)} />
         )}
 
-        {/* Text */}
         {!isImageOnly && !isAudio && (
           <View>
             <Text style={[styles.msgText, { color: isMe ? '#fff' : themeColors.text }]}>
@@ -313,7 +319,6 @@ export default function ChatRoomScreen() {
               <Text style={[styles.msgTime, { color: isMe ? 'rgba(255,255,255,0.65)' : themeColors.muted }]}>
                 {formatTimestamp(msg.timestamp)}
               </Text>
-              {/* Delivery / read ticks */}
               {isMe && (
                 <MaterialIcons
                   name={isRead ? 'done-all' : 'done'}
@@ -363,10 +368,10 @@ export default function ChatRoomScreen() {
           headerShown: true,
           headerRight: () => (
             <View style={{ flexDirection: 'row', gap: 18, marginRight: 8 }}>
-              <TouchableOpacity onPress={() => ConsultationService.startCall(userId, partnerId, 'voice')}>
+              <TouchableOpacity onPress={() => startCall('voice')}>
                 <MaterialIcons name="phone" size={24} color={themeColors.tint} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => ConsultationService.startCall(userId, partnerId, 'video')}>
+              <TouchableOpacity onPress={() => startCall('video')}>
                 <MaterialIcons name="videocam" size={26} color={themeColors.tint} />
               </TouchableOpacity>
             </View>
@@ -405,12 +410,6 @@ export default function ChatRoomScreen() {
           }
         </TouchableOpacity>
 
-        {role === 'patient' && (
-          <TouchableOpacity style={styles.iconBtn} onPress={pickClinicalImage} disabled={isUploading}>
-            <MaterialIcons name="healing" size={24} color={themeColors.emergency} />
-          </TouchableOpacity>
-        )}
-
         <TextInput
           style={[styles.input, { color: themeColors.text }]}
           placeholder={recording ? 'Recording…' : 'Type a message…'}
@@ -435,6 +434,18 @@ export default function ChatRoomScreen() {
         )}
       </View>
 
+      {/* ── Agora Call overlay ── */}
+      {activeCall && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1000 }]}>
+          <AgoraCallScreen
+            channelName={activeCall.channel}
+            callType={activeCall.type}
+            partnerName={partnerName ?? 'User'}
+            onEnd={() => setActiveCall(null)}
+          />
+        </View>
+      )}
+
       {/* Full-screen image modal */}
       <Modal visible={!!selectedImage} transparent animationType="fade">
         <View style={styles.modalBg}>
@@ -455,12 +466,10 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   chatContent: { padding: Spacing.md, paddingBottom: Spacing.xl },
 
-  // Date separator
   dateSepRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 10, paddingHorizontal: 4 },
   dateSepLine: { flex: 1, height: 1 },
   dateSepLabel: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Message bubbles
   bubble: { maxWidth: '80%', padding: Spacing.md, borderRadius: BorderRadius.xl, marginBottom: Spacing.sm, ...Shadows.light },
   myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   partnerBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1 },
@@ -469,25 +478,21 @@ const styles = StyleSheet.create({
   msgTime: { fontSize: 10 },
   speakerBtn: { marginRight: 2 },
 
-  // Images
   imageBubbleWrap: { width: 220, height: 220, borderRadius: BorderRadius.xl, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.05)' },
   chatImage: { width: 220, height: 220 },
   imageOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 36, justifyContent: 'flex-end', padding: 6 },
   imageTimestamp: { color: '#fff', fontSize: 10, alignSelf: 'flex-end', fontWeight: '600' },
 
-  // Empty state
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, paddingHorizontal: 40 },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '700' },
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
-  // Input bar
   inputBar: { flexDirection: 'row', alignItems: 'center', padding: Spacing.sm, borderTopWidth: 1, gap: 8 },
   iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   input: { flex: 1, minHeight: 40, maxHeight: 100, paddingHorizontal: 12, fontSize: 15 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
 
-  // Image modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   modalClose: { position: 'absolute', top: 52, right: 20, zIndex: 10, padding: 8 },
   fullImage: { width: '100%', height: '100%' },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, Platform, Dimensions, FlatList } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -9,7 +9,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
 import { DoctorService } from '@/src/services/DoctorService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
-import { ConsultationService } from '@/src/services/ConsultationService';
 import { useTranslation } from 'react-i18next';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { useVitalsViewModel } from '@/src/viewmodels/useVitalsViewModel';
@@ -19,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { NotificationService } from '@/src/services/NotificationService';
+import AgoraCallScreen from '@/src/components/AgoraCallScreen';
+import { AgoraCallService, CallType } from '@/src/services/AgoraCallService';
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
@@ -625,13 +626,6 @@ export default function DoctorDashboard() {
     }
   };
 
-  const startVideoCall = async () => {
-    if (!selectedPatient || !session?.user) return;
-    await ConsultationService.startVideoCall(
-      session.user.user_metadata?.full_name || 'Doctor', 
-      selectedPatient.full_name
-    );
-  };
 
   const handleGenerateSummary = async () => {
     if (!selectedPatient) return;
@@ -669,6 +663,22 @@ export default function DoctorDashboard() {
       console.warn('[DoctorDashboard] Nudge error:', e);
       Alert.alert('Error', 'Failed to send nudge. Please try again.');
     }
+  };
+
+  const [activeCall, setActiveCall] = useState<{ type: CallType; channel: string; partnerName: string } | null>(null);
+
+  const startCall = (type: CallType, patientId: string, patientName: string) => {
+    if (!session?.user?.id) return;
+    const channel = AgoraCallService.getChannelName(session.user.id, patientId);
+    AgoraCallService.notifyCallee({
+      channelName: channel,
+      callType: type,
+      callerId: session.user.id,
+      callerName: session.user.user_metadata?.full_name ?? 'Doctor',
+      calleeId: patientId,
+      calleeName: patientName,
+    }).catch(() => {});
+    setActiveCall({ type, channel, partnerName: patientName });
   };
 
   const [history, setHistory] = useState<any[]>([]);
@@ -750,13 +760,13 @@ export default function DoctorDashboard() {
             </View>
           </View>
           <View style={styles.headerControls}>
-             <TouchableOpacity 
-                style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]} 
-                onPress={() => Linking.openURL('tel:+123456789')}
+             <TouchableOpacity
+                style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]}
+                onPress={() => startCall('voice', selectedPatient.id, selectedPatient.full_name)}
               >
                 <MaterialIcons name="call" size={20} color="#fff" />
              </TouchableOpacity>
-             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={startVideoCall}>
+             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={() => startCall('video', selectedPatient.id, selectedPatient.full_name)}>
                 <MaterialIcons name="videocam" size={20} color="#fff" />
              </TouchableOpacity>
              <TouchableOpacity 
@@ -773,6 +783,18 @@ export default function DoctorDashboard() {
              </TouchableOpacity>
           </View>
         </View>
+
+        {/* Agora call overlay */}
+        {activeCall && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 1000 }]}>
+            <AgoraCallScreen
+              channelName={activeCall.channel}
+              callType={activeCall.type}
+              partnerName={activeCall.partnerName}
+              onEnd={() => setActiveCall(null)}
+            />
+          </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.scrollWithHeader} showsVerticalScrollIndicator={false}>
 

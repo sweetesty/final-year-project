@@ -108,6 +108,7 @@ export default function HomeScreen() {
   const { session, role } = useAuthViewModel();
   const { t, i18n } = useTranslation();
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [symptomModalVisible, setSymptomModalVisible] = useState(false);
   
   const patientid   = session?.user?.id ?? '';
@@ -300,23 +301,29 @@ export default function HomeScreen() {
 
   const zone = hrZone(vitals.heartrate);
 
-  const startAudioBriefing = () => {
+  const startAudioBriefing = async () => {
+    if (speaking) {
+      SpeechService.stop();
+      setSpeaking(false);
+      return;
+    }
+
     const lng = i18n.language;
-    
-    // 1. Localized Vitals & Status
     const hrText = t('common.hr_is', { hr: vitals.heartrate });
     const statusText = t('common.status_is', { status: zone.label });
     const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
-    
-    // 2. Localized Medication Info
     const nextMed = medications.length > 0 ? medications[0] : null;
-    const medText = nextMed 
+    const medText = nextMed
       ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
       : t('common.no_more_meds');
-
-    // 3. Construct Narrative
     const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
-    SpeechService.speak(fullText, lng);
+
+    setSpeaking(true);
+    try {
+      await SpeechService.speak(fullText, lng);
+    } finally {
+      setSpeaking(false);
+    }
   };
 
   // Prevent UI flicker for non-patients before redirect
@@ -388,11 +395,14 @@ export default function HomeScreen() {
               <Text style={styles.headerName}>{firstName}</Text>
             </View>
             <View style={styles.headerRight}>
-              <TouchableOpacity 
-                style={[styles.audioBriefBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+              <TouchableOpacity
+                style={[styles.audioBriefBtn, { backgroundColor: speaking ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.2)' }]}
                 onPress={startAudioBriefing}
+                disabled={false}
               >
-                <MaterialIcons name="volume-up" size={20} color="#fff" />
+                {speaking
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <MaterialIcons name="volume-up" size={20} color="#fff" />}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.monitorBadge, { marginBottom: 8 }]}

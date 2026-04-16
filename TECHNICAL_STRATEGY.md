@@ -27,3 +27,4 @@ Vitals Fusion employs a hybrid approach to fall detection, balancing high precis
 ---
 *Document Version: 1.0.0*
 *Developer Note: This strategy ensures that patients are protected 24/7 without needing to charge their device multiple times a day.*
+scm-history-item:c%3A%5Cproject%5Cfinal-year-project?%7B%22repositoryId%22%3A%22scm0%22%2C%22historyItemId%22%3A%220be982fc0f1d6ad7606e75ceefff94c7070aa5a6%22%2C%22historyItemParentId%22%3A%220de43f39f67cbbeb4feb8a27df6ab12bf0b517f0%22%2C%22historyItemDisplayId%22%3A%220be982f%22%7D

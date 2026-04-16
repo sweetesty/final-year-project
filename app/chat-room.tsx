@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { AudioMessage } from '@/src/components/AudioMessage';
 import { Image } from 'expo-image';
+import { ConsultationService } from '@/src/services/ConsultationService';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -149,21 +150,7 @@ export default function ChatRoomScreen() {
     };
   }, [chatId, session, userId, partnerId, updatePresence]);
 
-  // ── Call state ─────────────────────────────────────────────────────────────
-
-  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected'>('idle');
-  const [callType, setCallType] = useState<'voice' | 'video'>('voice');
   const [callDuration, setCallDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (callStatus === 'connected') interval = setInterval(() => setCallDuration(p => p + 1), 1000);
-    return () => clearInterval(interval);
-  }, [callStatus]);
-
-  const formatCallTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   // ── Media ──────────────────────────────────────────────────────────────────
 
@@ -376,10 +363,10 @@ export default function ChatRoomScreen() {
           headerShown: true,
           headerRight: () => (
             <View style={{ flexDirection: 'row', gap: 18, marginRight: 8 }}>
-              <TouchableOpacity onPress={() => { setCallType('voice'); setCallStatus('calling'); setTimeout(() => setCallStatus('connected'), 2000); }}>
+              <TouchableOpacity onPress={() => ConsultationService.startCall(userId, partnerId, 'voice')}>
                 <MaterialIcons name="phone" size={24} color={themeColors.tint} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setCallType('video'); setCallStatus('calling'); setTimeout(() => setCallStatus('connected'), 2500); }}>
+              <TouchableOpacity onPress={() => ConsultationService.startCall(userId, partnerId, 'video')}>
                 <MaterialIcons name="videocam" size={26} color={themeColors.tint} />
               </TouchableOpacity>
             </View>
@@ -448,49 +435,6 @@ export default function ChatRoomScreen() {
         )}
       </View>
 
-      {/* ── Call overlay ── */}
-      {callStatus !== 'idle' && (
-        <Animated.View entering={FadeIn} style={[StyleSheet.absoluteFill, { backgroundColor: '#0F172A', zIndex: 1000 }]}>
-          {callType === 'video' && callStatus === 'connected' ? (
-            <LinearGradient colors={['#312E81', '#1E1B4B']} style={StyleSheet.absoluteFill} />
-          ) : (
-            <LinearGradient colors={['#1E293B', '#0F172A']} style={StyleSheet.absoluteFill} />
-          )}
-          <View style={styles.callContent}>
-            <View style={styles.callTop}>
-              <Text style={styles.callName}>{partnerName ?? t('common.doctor')}</Text>
-              <Text style={styles.callState}>
-                {callStatus === 'calling' ? 'Calling…' : formatCallTime(callDuration)}
-              </Text>
-              {callStatus === 'connected' && (
-                <View style={styles.secureBadge}>
-                  <MaterialIcons name="lock" size={11} color="#10B981" />
-                  <Text style={styles.secureText}>SECURE</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.callCenter}>
-              <View style={[styles.callAvatar, { borderColor: themeColors.tint }]}>
-                <Text style={styles.callAvatarText}>{(partnerName ?? 'D').charAt(0)}</Text>
-              </View>
-            </View>
-            <View style={styles.callBottom}>
-              <View style={styles.callActions}>
-                <TouchableOpacity style={[styles.callAction, isMuted && { backgroundColor: 'rgba(239,68,68,0.3)' }]} onPress={() => setIsMuted(p => !p)}>
-                  <MaterialIcons name={isMuted ? 'mic-off' : 'mic'} size={24} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.callAction, isSpeakerOn && { backgroundColor: themeColors.tint + '60' }]} onPress={() => setIsSpeakerOn(p => !p)}>
-                  <MaterialIcons name={isSpeakerOn ? 'volume-up' : 'volume-down'} size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.endCallBtn} onPress={() => { setCallStatus('idle'); setCallDuration(0); }}>
-                <MaterialIcons name="call-end" size={32} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Animated.View>
-      )}
-
       {/* Full-screen image modal */}
       <Modal visible={!!selectedImage} transparent animationType="fade">
         <View style={styles.modalBg}>
@@ -542,21 +486,6 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   input: { flex: 1, minHeight: 40, maxHeight: 100, paddingHorizontal: 12, fontSize: 15 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-
-  // Call overlay
-  callContent: { flex: 1, padding: 40, justifyContent: 'space-between', paddingBottom: 60 },
-  callTop: { alignItems: 'center', marginTop: 20, gap: 6 },
-  callName: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  callState: { color: 'rgba(255,255,255,0.65)', fontSize: 15, fontWeight: '600' },
-  secureBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  secureText: { color: '#10B981', fontSize: 10, fontWeight: '800' },
-  callCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  callAvatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
-  callAvatarText: { color: '#fff', fontSize: 44, fontWeight: '800' },
-  callBottom: { alignItems: 'center', gap: 28 },
-  callActions: { flexDirection: 'row', gap: 20 },
-  callAction: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  endCallBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
 
   // Image modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },

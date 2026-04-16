@@ -16,6 +16,7 @@ import { DataService, supabase } from '@/src/services/SupabaseService';
 import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
 import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 import { LocationService } from '@/src/services/LocationService';
+import { IncomingCallOverlay } from '@/src/components/IncomingCallOverlay';
 import '@/src/i18n'; // Initialize i18n
 
 // Keep the splash screen visible while we fetch resources
@@ -137,6 +138,7 @@ export default function RootLayout() {
         <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
+      <IncomingCallOverlay userId={session?.user?.id} />
     </ThemeProvider>
   );
 }

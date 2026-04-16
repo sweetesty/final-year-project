@@ -15,6 +15,14 @@ export class SmsService {
   }
 
   /**
+   * Specifically for critical medication escalation alerts.
+   */
+  static async sendEmergencyEscalation(to: string, patientName: string, medName: string): Promise<boolean> {
+    const message = `URGENT: ${patientName} has missed a critical dose of ${medName}. Please check on them immediately. (Sent via Vitals Fusion)`;
+    return this.sendNativeSms(to, message);
+  }
+
+  /**
    * Opens the device's native SMS app with pre-filled recipient and message.
    * Works on both iOS and Android with no API key needed.
    */

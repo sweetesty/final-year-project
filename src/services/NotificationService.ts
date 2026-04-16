@@ -23,6 +23,13 @@ export class NotificationService {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FF231F7C',
       });
+      await Notifications.setNotificationChannelAsync('messages', {
+        name: 'Messages',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 100, 100, 100],
+        lightColor: '#6366F1',
+        sound: 'default',
+      });
     }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -67,32 +74,62 @@ export class NotificationService {
   }
 
   static async scheduleMedicationReminders(medication: Medication) {
-    const { name, times, isCritical, frequency, specificDays } = medication;
+    const { name, times, isCritical, frequency, specificDays, durationDays, startDate } = medication;
+
+    const title = isCritical
+      ? '⚠️ CRITICAL MEDICATION'
+      : medication.isPrescribed
+      ? '📋 PRESCRIBED DOSE'
+      : '💊 Medication Reminder';
+
+    const body = medication.isPrescribed
+      ? `It's time for your prescribed ${name}.`
+      : `Reminder to take your ${name}.`;
 
     for (const time of times) {
       const [hours, minutes] = time.split(':').map(Number);
 
-      const title = medication.isCritical 
-        ? '⚠️ CRITICAL MEDICATION' 
-        : medication.isPrescribed 
-          ? '📋 PRESCRIBED DOSE' 
-          : '💊 Medication Reminder';
+      if (durationDays && durationDays > 0) {
+        // Schedule one notification per day for the duration
+        const base = startDate ? new Date(startDate) : new Date();
+        base.setHours(hours, minutes, 0, 0);
 
-      const body = medication.isPrescribed 
-        ? `It's time for your prescribed ${name}.`
-        : `Reminder to take your ${name}.`;
+        for (let day = 0; day < durationDays; day++) {
+          const fireDate = new Date(base);
+          fireDate.setDate(base.getDate() + day);
 
-      const identifier = await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          data: { medicationId: medication.id },
-          sound: medication.isCritical ? 'critical' : 'default',
-        },
-        trigger: this.getTriggerForFrequency(frequency, hours, minutes, specificDays),
-      });
+          // Skip if in the past
+          if (fireDate <= new Date()) continue;
 
-      console.log(`Scheduled reminder for ${name} at ${time}. ID: ${identifier}`);
+          const identifier = await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body: `${body} (Day ${day + 1} of ${durationDays})`,
+              data: { medicationId: medication.id },
+              sound: isCritical ? 'default' : 'default',
+              channelId: 'default',
+            } as any,
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: fireDate,
+            },
+          });
+          console.log(`[Notifications] Scheduled ${name} day ${day + 1}: ${fireDate.toISOString()} — ID: ${identifier}`);
+        }
+      } else {
+        // Indefinite repeating reminder
+        const identifier = await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            data: { medicationId: medication.id },
+            sound: 'default',
+            channelId: 'default',
+          } as any,
+          trigger: this.getTriggerForFrequency(frequency, hours, minutes, specificDays),
+        });
+        console.log(`[Notifications] Scheduled repeating reminder for ${name} at ${time} — ID: ${identifier}`);
+      }
     }
   }
 
@@ -129,7 +166,66 @@ export class NotificationService {
     };
   }
 
+  static async cancelMedicationReminders(medicationId: string) {
+    if (!medicationId) return;
+    try {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const toCancel = scheduled.filter(n => n.content.data?.medicationId === medicationId);
+      
+      for (const n of toCancel) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+      console.log(`[Notifications] Cancelled ${toCancel.length} scheduled reminders for med: ${medicationId}`);
+    } catch (e) {
+      console.warn('[NotificationService] Failed to cancel reminders:', e);
+    }
+  }
+
   static async cancelAllReminders() {
     await Notifications.cancelAllScheduledNotificationsAsync();
+  }
+
+  /**
+   * Send a push notification to a specific Expo push token via Expo's push API.
+   * Works both in-app (via local notification fallback) and out-of-app (via push).
+   */
+  static async sendPushToToken(
+    expoPushToken: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>
+  ) {
+    if (!expoPushToken) return;
+    try {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+        },
+        body: JSON.stringify({
+          to: expoPushToken,
+          title,
+          body,
+          data: data ?? {},
+          sound: 'default',
+          priority: 'high',
+          channelId: 'messages',
+        }),
+      });
+    } catch (e) {
+      console.warn('[NotificationService] Push send failed:', e);
+    }
+  }
+
+  /**
+   * Show an immediate local notification (used when the app is in the foreground).
+   */
+  static async showLocalNotification(title: string, body: string, data?: Record<string, any>) {
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, data: data ?? {}, sound: 'default' },
+      trigger: null,
+    });
   }
 }

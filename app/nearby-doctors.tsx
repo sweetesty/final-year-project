@@ -227,11 +227,18 @@ export default function NearbyDoctorsScreen() {
             style={styles.chatWithBtn}
             onPress={() => {
               setSelectedDoctor(null);
-              router.push({ pathname: '/chat-room', params: { partnerId: selectedDoctor.id, partnerName: selectedDoctor.full_name } });
+              router.push({
+                pathname: '/doctor-public-profile',
+                params: {
+                  id: selectedDoctor.id,
+                  full_name: selectedDoctor.full_name,
+                  specialization: selectedDoctor.specialization || 'Clinical Specialist'
+                }
+              });
             }}
           >
-            <MaterialIcons name="chat" size={16} color="#fff" />
-            <Text style={styles.chatWithBtnText}>Message Doctor</Text>
+            <MaterialIcons name="person-search" size={16} color="#fff" />
+            <Text style={styles.chatWithBtnText}>View Clinical Profile</Text>
           </TouchableOpacity>
         </Animated.View>
       )}

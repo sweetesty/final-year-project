@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { AppState } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
@@ -12,10 +12,11 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { NotificationService } from '@/src/services/NotificationService';
-import { DataService } from '@/src/services/SupabaseService';
+import { DataService, supabase } from '@/src/services/SupabaseService';
 import { BackgroundMonitorService } from '@/src/services/BackgroundMonitorService';
 import { OfflineSyncService } from '@/src/services/OfflineSyncService';
 import { LocationService } from '@/src/services/LocationService';
+import { IncomingCallOverlay } from '@/src/components/IncomingCallOverlay';
 import '@/src/i18n'; // Initialize i18n
 
 // Keep the splash screen visible while we fetch resources
@@ -36,8 +37,11 @@ export default function RootLayout() {
     }
   }, [loading]);
 
+  const rootNavigationState = useRootNavigationState();
+  const isNavReady = !!rootNavigationState?.key;
+
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !isNavReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -46,7 +50,7 @@ export default function RootLayout() {
     } else if (session && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [session, isReady, segments]);
+  }, [session, isReady, isNavReady, segments]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -61,7 +65,13 @@ export default function RootLayout() {
         }
 
         try {
-          await BackgroundMonitorService.register();
+          // Only register background monitoring for Patients
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+          if (profile?.role === 'patient') {
+            await BackgroundMonitorService.register();
+          } else {
+            await BackgroundMonitorService.unregister();
+          }
         } catch (error) {
           console.error('Failed to register background monitor:', error);
         }
@@ -73,11 +83,18 @@ export default function RootLayout() {
       setupServices();
 
       const unsubscribe = NotificationService.addNotificationListeners(
-        (notification) => {
-          console.log('Notification Received:', notification);
+        (_notification) => {
+          // In-foreground notifications are shown automatically via setNotificationHandler
         },
         (response) => {
-          console.log('Notification Response:', response);
+          // Tapping a notification navigates to the relevant chat
+          const data = response.notification.request.content.data as any;
+          if (data?.partnerId && data?.partnerName) {
+            router.push({
+              pathname: '/chat-room',
+              params: { partnerId: data.partnerId, partnerName: data.partnerName },
+            });
+          }
         }
       );
 
@@ -116,8 +133,12 @@ export default function RootLayout() {
         <Stack.Screen name="live-tracking" options={{ title: t('nav.live_location') }} />
         <Stack.Screen name="chat-room" options={{ title: t('nav.clinical_chat') }} />
         <Stack.Screen name="nearby-doctors" options={{ headerShown: false }} />
+        <Stack.Screen name="doctor-public-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="connection-requests" options={{ headerShown: false }} />
+        <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
+      <IncomingCallOverlay userId={session?.user?.id} />
     </ThemeProvider>
   );
 }

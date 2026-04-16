@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, Platform, Dimensions, FlatList } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -9,13 +9,162 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
 import { DoctorService } from '@/src/services/DoctorService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
-import { ConsultationService } from '@/src/services/ConsultationService';
 import { useTranslation } from 'react-i18next';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
+import { useVitalsViewModel } from '@/src/viewmodels/useVitalsViewModel';
 import { AnalyticsService } from '@/src/services/AnalyticsService';
+import { ChatService } from '@/src/services/ChatService';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Image } from 'expo-image';
+import { NotificationService } from '@/src/services/NotificationService';
+import AgoraCallScreen from '@/src/components/AgoraCallScreen';
+import { AgoraCallService, CallType } from '@/src/services/AgoraCallService';
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  darkContainer: { flex: 1, backgroundColor: '#0F0F1A' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { padding: Spacing.lg },
+  darkScrollContent: { padding: 16, paddingBottom: 40 },
+  panelHeader: { paddingTop: 56, paddingBottom: 20, paddingHorizontal: 20, overflow: 'hidden' },
+  panelGridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.04)' },
+  panelHeaderTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
+  panelHeaderLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', letterSpacing: 2, marginBottom: 4 },
+  panelHeaderTitle: { fontSize: 26, fontWeight: '800', color: '#fff' },
+  panelLiveChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10B98115', borderWidth: 1, borderColor: '#10B981', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  panelLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981' },
+  panelLiveText: { color: '#10B981', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  panelStatsBar: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 14 },
+  panelStatItem: { flex: 1 },
+  panelStatNum: { fontSize: 28, fontWeight: '800', color: '#fff' },
+  panelStatLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600', marginTop: 2 },
+  linkBannerDark: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.35)', borderRadius: 14, padding: 14, marginBottom: 10 },
+  linkBannerIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(99,102,241,0.2)', justifyContent: 'center', alignItems: 'center' },
+  linkBannerText: { flex: 1, color: '#818CF8', fontWeight: '700', fontSize: 14 },
+  linkFormDark: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 16, marginBottom: 12, gap: 12 },
+  linkFormHint: { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
+  darkInput: { height: 60, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  linkBtnDark: { borderRadius: 14, overflow: 'hidden' },
+  linkBtnGradient: { height: 52, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  linkBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  darkSectionLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginBottom: 10, marginLeft: 4 },
+  darkPatientCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 14, marginBottom: 10, gap: 12 },
+  darkPatientAvatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  darkPatientAvatarText: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  darkPatientName: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  darkPatientStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  darkStatusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981' },
+  darkPatientSub: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
+  darkPatientArrow: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' },
+  darkEmptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  darkEmptyIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(99,102,241,0.1)', justifyContent: 'center', alignItems: 'center' },
+  darkEmptyTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  darkEmptySubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.4)', textAlign: 'center', paddingHorizontal: 40 },
+  premiumHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 54 : 44, paddingBottom: 16 },
+  miniBackBtn: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  headerInfo: { flex: 1, marginHorizontal: 12 },
+  headerPatientName: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5 },
+  headerControls: { flexDirection: 'row', gap: 10 },
+  roundIconBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', ...Shadows.light },
+  scrollWithHeader: { padding: 20, paddingTop: Platform.OS === 'ios' ? 120 : 110, paddingBottom: 40 },
+  glassCard: { borderRadius: 24, padding: 16, marginBottom: 20, borderWidth: 1, ...Shadows.light },
+  cardTitle: { fontSize: 14, fontWeight: '800', marginBottom: 12, opacity: 0.8, letterSpacing: 0.5, textTransform: 'uppercase' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  pulseContainer: { width: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
+  pulseDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2 },
+  gridRow: { flexDirection: 'row', gap: 16, marginBottom: 20 },
+  statTile: { flex: 1, padding: 16, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 8, ...Shadows.light },
+  statTileLabel: { fontSize: 12, fontWeight: '700' },
+  aiSummaryCard: { borderRadius: 24, padding: 20, marginBottom: 24, ...Shadows.medium },
+  aiHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  aiLabel: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  aiLabelText: { fontSize: 12, fontWeight: '800' },
+  aiText: { fontSize: 15, lineHeight: 24, fontWeight: '500' },
+  refreshBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  vitalsGrid: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10 },
+  vBlock: { alignItems: 'center' },
+  vBlockLabel: { fontSize: 10, fontWeight: '800', color: '#94A3B8', marginBottom: 4 },
+  vBlockValue: { fontSize: 24, fontWeight: '900' },
+  historyItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  historyDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
+  historyType: { fontSize: 14, fontWeight: '700' },
+  historyTime: { fontSize: 11, color: '#94A3B8' },
+  statusTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  galleryItem: { width: 120, height: 160, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
+  galleryImg: { width: '100%', height: '100%' },
+  galleryOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)' },
+  galleryTime: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  medSummaryGrid: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  medSummaryMain: { flex: 1.2, paddingRight: 16, borderRightWidth: 1 },
+  upcomingTime: { fontSize: 28, fontWeight: '900', letterSpacing: -1, marginBottom: 2 },
+  upcomingMed: { fontSize: 15, fontWeight: '700' },
+  medSummaryStats: { flex: 1, paddingLeft: 16, gap: 12 },
+  progressTrack: { height: 6, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' },
+  progressBar: { height: '100%', borderRadius: 3 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  prescribeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  prescribeBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  medicationList: { gap: 12 },
+  medItem: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, borderBottomWidth: 1 },
+  medNameSmall: { fontSize: 14, fontWeight: '700' },
+  medSub: { fontSize: 12, marginTop: 2 },
+  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  typeBadgeText: { fontSize: 8, fontWeight: '800' },
+  nudgeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+
+  // PatientDoctorView specialized styles
+  mapContainer: { height: Math.round(Dimensions.get('window').height * 0.38), position: 'relative' },
+  mapHeaderOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: Platform.OS === 'ios' ? 56 : 44, paddingBottom: 20, paddingHorizontal: 16 },
+  mapTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  mapSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
+  recenterBtn: { position: 'absolute', bottom: 12, right: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', ...Shadows.light },
+  mapMarker: { width: 36, height: 36, borderRadius: 18, borderWidth: 2.5, justifyContent: 'center', alignItems: 'center' },
+  mapMarkerSelected: { borderWidth: 3, transform: [{ scale: 1.18 }] },
+  mapMarkerInner: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  markerOnlineDot: { position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: '#10B981', borderWidth: 2, borderColor: '#fff' },
+  mapCallout: { position: 'absolute', bottom: 12, left: 12, right: 56 },
+  mapCalloutInner: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 12, gap: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  calloutName: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  calloutSpec: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 2 },
+  calloutChatBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#4338CA', justifyContent: 'center', alignItems: 'center' },
+  calloutClose: { width: 28, height: 28, justifyContent: 'center', alignItems: 'center' },
+  bottomSheet: { flex: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, paddingTop: 16, overflow: 'hidden' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: Spacing.md, marginBottom: 10 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, height: 46, borderRadius: 14, borderWidth: 1 },
+  searchInput: { flex: 1, fontSize: 15 },
+  filterBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  filterDropdown: { marginHorizontal: Spacing.md, marginBottom: 8, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  filterDropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  filterDropdownText: { fontSize: 14 },
+  emptyState: { alignItems: 'center', paddingTop: 40, gap: 12 },
+  emptyTextPdv: { fontSize: 14, textAlign: 'center' },
+  resultsLabel: { fontSize: 12, fontWeight: '600', paddingHorizontal: Spacing.md, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  docCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, gap: 12, marginBottom: 10, ...Shadows.light },
+  docAvatarImg: { width: 48, height: 48, borderRadius: 24 },
+  docAvatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  docAvatarText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  docNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  docName: { fontSize: 15, fontWeight: '700', flex: 1 },
+  docSpec: { fontSize: 12 },
+  onlinePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#10B98118', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  onlinePillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  onlinePillText: { color: '#10B981', fontSize: 10, fontWeight: '700' },
+  docChatBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  codeBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
+  codeBarLabel: { fontSize: 13, fontWeight: '600' },
+  codeBarValue: { fontSize: 15, fontWeight: '800', flex: 1, letterSpacing: 2 },
+  statMini: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statMiniIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  statMiniVal: { fontSize: 16, fontWeight: '800', lineHeight: 16 },
+  statMiniLabel: { fontSize: 10, color: 'rgba(150,150,150,0.6)', fontWeight: '700' },
+  analyticsSection: { gap: 16, marginBottom: 24 },
+  summaryPlaceholder: { padding: 20, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#ccc', borderRadius: 12 },
+  sectionLabel: { fontSize: 12, fontWeight: '700', marginBottom: 8, opacity: 0.6 },
+  emptyText: { textAlign: 'center', fontSize: 12, fontStyle: 'italic' },
+});
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -37,6 +186,18 @@ const StatusIndicator = ({ theme }: any) => {
   );
 };
 
+const StatMini = ({ label, value, color, icon, isDark }: any) => (
+  <View style={styles.statMini}>
+    <View style={[styles.statMiniIcon, { backgroundColor: isDark ? color + '30' : color + '15' }]}>
+      <MaterialIcons name={icon} size={14} color={color} />
+    </View>
+    <View>
+      <Text style={[styles.statMiniVal, { color: isDark ? '#fff' : '#000' }]}>{value}</Text>
+      <Text style={styles.statMiniLabel}>{label}</Text>
+    </View>
+  </View>
+);
+
 // ─── Specialty filter chips ───────────────────────────────────────────────────
 const SPECIALTIES = [
   'All',
@@ -52,7 +213,7 @@ const SPECIALTIES = [
 ];
 
 // ─── Patient-facing Find Doctor screen ───────────────────────────────────────
-function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, themeColors, isDark, t }: any) {
+function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router, themeColors, isDark, t }: any) {
   const mapRef = useRef<MapView>(null);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [nearbyDoctors, setNearbyDoctors] = useState<any[]>([]);
@@ -87,7 +248,7 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
         mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 800);
       }
     } catch (e) {
-      console.error('[PatientDoctorView] location error:', e);
+      console.warn('[PatientDoctorView] location fetch failed (expected in simulators):', e);
     } finally {
       setLocationLoading(false);
     }
@@ -202,9 +363,16 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
               </View>
               <TouchableOpacity
                 style={styles.calloutChatBtn}
-                onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedMarker.id, partnerName: selectedMarker.full_name } })}
+                onPress={() => router.push({ 
+                  pathname: '/doctor-public-profile', 
+                  params: { 
+                    id: selectedMarker.id, 
+                    full_name: selectedMarker.full_name,
+                    specialization: selectedMarker.specialization || 'Clinical Specialist'
+                  } 
+                })}
               >
-                <MaterialIcons name="chat" size={16} color="#fff" />
+                <MaterialIcons name="person-search" size={16} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.calloutClose} onPress={() => setSelectedMarker(null)}>
                 <MaterialIcons name="close" size={16} color="rgba(255,255,255,0.5)" />
@@ -263,7 +431,7 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
 
         {/* Results count */}
         <Text style={[styles.resultsLabel, { color: themeColors.muted }]}>
-          {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} found
+          {linkedDoctors.length > 0 ? `Your Connected Doctors (${linkedDoctors.length})` : `${filteredDoctors.length} ${filteredDoctors.length === 1 ? 'doctor' : 'doctors'} found`}
           {activeFilter !== 'All' ? ` · ${activeFilter}` : ''}
         </Text>
 
@@ -276,18 +444,23 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <MaterialIcons name="person-search" size={48} color={themeColors.muted + '50'} />
-              <Text style={[styles.emptyText, { color: themeColors.muted }]}>
+              <Text style={[styles.emptyTextPdv, { color: themeColors.muted }]}>
                 {activeFilter === 'Nearby' ? 'No doctors found within 25km' : 'No doctors match your search'}
               </Text>
             </View>
           }
-          renderItem={({ item: doc, index }: any) => (
-            <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
-              <TouchableOpacity
-                style={[styles.docCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
-                onPress={() => focusDoctor(doc)}
-                activeOpacity={0.85}
-              >
+          renderItem={({ item: doc, index }: any) => {
+            const isLinked = linkedDoctors.some((ld: any) => ld.id === doc.id);
+            return (
+              <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
+                <TouchableOpacity
+                  style={[
+                    styles.docCard, 
+                    { backgroundColor: themeColors.card, borderColor: isLinked ? themeColors.tint : themeColors.border }
+                  ]}
+                  onPress={() => focusDoctor(doc)}
+                  activeOpacity={0.85}
+                >
                 {/* Avatar — show profile image if available, else gradient initials */}
                 {doc.avatar_url ? (
                   <Image
@@ -312,6 +485,12 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                         <Text style={styles.onlinePillText}>Online</Text>
                       </View>
                     )}
+                    {isLinked && (
+                      <View style={[styles.onlinePill, { backgroundColor: themeColors.tint + '20' }]}>
+                        <MaterialIcons name="verified" size={10} color={themeColors.tint} />
+                        <Text style={[styles.onlinePillText, { color: themeColors.tint }]}>Linked</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={[styles.docSpec, { color: themeColors.muted }]} numberOfLines={1}>
                     {doc.specialization || 'Clinical Specialist'}
@@ -322,13 +501,21 @@ function PatientDoctorView({ allDoctors, linkedDoctor, myCode, session, router, 
                 {/* Actions */}
                 <TouchableOpacity
                   style={[styles.docChatBtn, { backgroundColor: themeColors.tint }]}
-                  onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: doc.id, partnerName: doc.full_name } })}
+                  onPress={() => router.push({ 
+                    pathname: '/doctor-public-profile', 
+                    params: { 
+                      id: doc.id, 
+                      full_name: doc.full_name,
+                      specialization: doc.specialization || 'Clinical Specialist'
+                    } 
+                  })}
                 >
-                  <MaterialIcons name="chat" size={16} color="#fff" />
+                  <MaterialIcons name="person-search" size={16} color="#fff" />
                 </TouchableOpacity>
               </TouchableOpacity>
             </Animated.View>
-          )}
+          );
+        }}
         />
       </View>
 
@@ -353,18 +540,30 @@ export default function DoctorDashboard() {
   const isDark = colorScheme === 'dark';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { session, role } = useAuthViewModel();
   const { t } = useTranslation();
 
-  const [doctor, setDoctor] = useState<any>(null);
+  const [doctors, setDoctors] = useState<any[]>([]);
   const [allDoctors, setAllDoctors] = useState<any[]>([]);
   const [linkedPatients, setLinkedPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [healthSummary, setHealthSummary] = useState<string | null>(null);
   const [generatingSummary, setGeneratingSummary] = useState(false);
 
+  // Deep linking logic: Auto-select patient from params
+  useEffect(() => {
+    if (params.patientId && linkedPatients.length > 0) {
+      const p = linkedPatients.find(lp => lp.id === params.patientId);
+      if (p) {
+        setSelectedPatient(p);
+      }
+    }
+  }, [params.patientId, linkedPatients]);
+
   // Fetch patient meds for clinical review
-  const { medications: patientMeds } = useMedicationViewModel(selectedPatient?.id || '');
+  const { medications: patientMeds, summary: medSummary } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
+  const { chartData: patientChartData } = useVitalsViewModel(selectedPatient?.id || '');
   const [myCode, setMyCode] = useState<string>(''); // Patient's own link code
   const [linkCode, setLinkCode] = useState<string>(''); // Input field for linking
   const [loading, setLoading] = useState(true);
@@ -384,13 +583,13 @@ export default function DoctorDashboard() {
   const loadDoctor = async () => {
     setLoading(true);
     try {
-      const [d, doctors, code] = await Promise.all([
-        DoctorService.getLinkedDoctor(session!.user.id),
+      const [linkedDocs, allDocs, code] = await Promise.all([
+        DoctorService.getLinkedDoctors(session!.user.id),
         DoctorService.getAllDoctors(),
         DoctorService.ensurePatientCode(session!.user.id),
       ]);
-      setDoctor(d);
-      setAllDoctors(doctors); // always populate — map needs doctors regardless of link status
+      setDoctors(linkedDocs);
+      setAllDoctors(allDocs); // always populate — map needs doctors regardless of link status
       setMyCode(code);
     } catch (e) {
       console.error(e);
@@ -404,7 +603,7 @@ export default function DoctorDashboard() {
     try {
       const patients = await DoctorService.getLinkedPatients(session!.user.id);
       setLinkedPatients(patients);
-      if (patients.length > 0) setSelectedPatient(patients[0]);
+      // Removed auto-select to allow viewing the full list first
     } catch (error) {
       console.error(error);
     } finally {
@@ -427,10 +626,6 @@ export default function DoctorDashboard() {
     }
   };
 
-  const startVideoCall = async () => {
-    if (!selectedPatient) return;
-    await ConsultationService.startVideoCall(session!.user.user_metadata.full_name, selectedPatient.full_name);
-  };
 
   const handleGenerateSummary = async () => {
     if (!selectedPatient) return;
@@ -445,8 +640,51 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleNudge = async (medicationName: string) => {
+    if (!selectedPatient || !selectedPatient.push_token) {
+      Alert.alert('Unable to Nudge', 'This patient has not registered for push notifications yet.');
+      return;
+    }
+
+    const rawName = session?.user?.user_metadata?.full_name || 'Your Doctor';
+    const doctorName = rawName === 'Your Doctor' 
+      ? rawName 
+      : `Dr. ${rawName.replace(/^(Doctor|Dr\.?)\s+/i, '').split(' ')[0]}`;
+    
+    try {
+      await NotificationService.sendPushToToken(
+        selectedPatient.push_token,
+        '💊 Medication Reminder',
+        `${doctorName} is reminding you to take your ${medicationName}.`,
+        { type: 'medication_nudge', patientId: selectedPatient.id }
+      );
+      Alert.alert('Nudge Sent', `A medication reminder has been sent to ${selectedPatient?.full_name}.`);
+    } catch (e) {
+      console.warn('[DoctorDashboard] Nudge error:', e);
+      Alert.alert('Error', 'Failed to send nudge. Please try again.');
+    }
+  };
+
+  const [activeCall, setActiveCall] = useState<{ type: CallType; channel: string; partnerName: string } | null>(null);
+
+  const startCall = (type: CallType, patientId: string, patientName: string) => {
+    if (!session?.user?.id) return;
+    const channel = AgoraCallService.getChannelName(session.user.id, patientId);
+    AgoraCallService.notifyCallee({
+      channelName: channel,
+      callType: type,
+      callerId: session.user.id,
+      callerName: session.user.user_metadata?.full_name ?? 'Doctor',
+      calleeId: patientId,
+      calleeName: patientName,
+    }).catch(() => {});
+    setActiveCall({ type, channel, partnerName: patientName });
+  };
+
   const [history, setHistory] = useState<any[]>([]);
   const [patientContext, setPatientContext] = useState<any>(null);
+  const [clinicalRecords, setClinicalRecords] = useState<any[]>([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
 
   useEffect(() => {
     if (selectedPatient) {
@@ -456,15 +694,20 @@ export default function DoctorDashboard() {
 
   const loadPatientDetails = async () => {
     if (!selectedPatient) return;
+    setLoadingRecords(true);
     try {
-      const [hist, context] = await Promise.all([
+      const [hist, context, records] = await Promise.all([
         DoctorService.getPatientAlertHistory(selectedPatient.id),
-        DoctorService.getPatientClinicalContext(selectedPatient.id)
+        DoctorService.getPatientClinicalContext(selectedPatient.id),
+        ChatService.getClinicalRecords(selectedPatient.id)
       ]);
       setHistory(hist);
       setPatientContext(context);
+      setClinicalRecords(records);
     } catch (e) {
       console.error('[Doctor] Detail load error:', e);
+    } finally {
+      setLoadingRecords(false);
     }
   };
 
@@ -475,7 +718,7 @@ export default function DoctorDashboard() {
     return (
       <PatientDoctorView
         allDoctors={allDoctors}
-        linkedDoctor={doctor}
+        linkedDoctors={doctors}
         myCode={myCode}
         session={session}
         router={router}
@@ -517,15 +760,21 @@ export default function DoctorDashboard() {
             </View>
           </View>
           <View style={styles.headerControls}>
-             <TouchableOpacity 
-                style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]} 
-                onPress={() => Linking.openURL('tel:+123456789')}
+             <TouchableOpacity
+                style={[styles.roundIconBtn, { backgroundColor: themeColors.tint }]}
+                onPress={() => startCall('voice', selectedPatient.id, selectedPatient.full_name)}
               >
                 <MaterialIcons name="call" size={20} color="#fff" />
              </TouchableOpacity>
-             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={startVideoCall}>
+             <TouchableOpacity style={[styles.roundIconBtn, { backgroundColor: themeColors.secondary }]} onPress={() => startCall('video', selectedPatient.id, selectedPatient.full_name)}>
                 <MaterialIcons name="videocam" size={20} color="#fff" />
              </TouchableOpacity>
+             <TouchableOpacity 
+                style={[styles.roundIconBtn, { backgroundColor: themeColors.vital }]} 
+                onPress={() => router.push({ pathname: '/add-medication', params: { mode: 'prescribe', patientId: selectedPatient.id } })}
+              >
+                <MaterialIcons name="add-moderator" size={20} color="#fff" />
+              </TouchableOpacity>
              <TouchableOpacity 
                 style={[styles.roundIconBtn, { backgroundColor: '#475569' }]} 
                 onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: selectedPatient.id, partnerName: selectedPatient.full_name } })}
@@ -534,6 +783,18 @@ export default function DoctorDashboard() {
              </TouchableOpacity>
           </View>
         </View>
+
+        {/* Agora call overlay */}
+        {activeCall && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 1000 }]}>
+            <AgoraCallScreen
+              channelName={activeCall.channel}
+              callType={activeCall.type}
+              partnerName={activeCall.partnerName}
+              onEnd={() => setActiveCall(null)}
+            />
+          </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.scrollWithHeader} showsVerticalScrollIndicator={false}>
 
@@ -566,7 +827,19 @@ export default function DoctorDashboard() {
             </View>
 
             <ClinicalCard title="Heart Rate Trend (24h)" theme={themeColors}>
-              <VitalsTrendChart data={[72, 75, 82, 70, 78, 85, 76, 74]} labels={["8a", "10a", "12p", "2p", "4p", "6p", "8p", "10p"]} theme={themeColors} />
+              <VitalsTrendChart 
+                data={patientChartData.heartRate.data} 
+                labels={patientChartData.heartRate.labels} 
+                theme={{ vital: themeColors.emergency }} 
+              />
+            </ClinicalCard>
+
+            <ClinicalCard title="Blood Oxygen (SpO2) Trend" theme={themeColors}>
+              <VitalsTrendChart 
+                data={patientChartData.spo2.data} 
+                labels={patientChartData.spo2.labels} 
+                theme={{ vital: themeColors.tint }} 
+              />
             </ClinicalCard>
 
             {/* NEW: Emergency History Section */}
@@ -586,6 +859,30 @@ export default function DoctorDashboard() {
                       </View>
                    </View>
                  ))
+               )}
+            </ClinicalCard>
+
+            {/* NEW: Clinical Image Gallery */}
+            <ClinicalCard title="🖼️ Clinical Image Gallery" theme={themeColors}>
+               {loadingRecords ? (
+                 <ActivityIndicator size="small" color={themeColors.tint} style={{ marginVertical: 20 }} />
+               ) : clinicalRecords.length === 0 ? (
+                 <Text style={{ color: themeColors.muted, fontSize: 13, fontStyle: 'italic', paddingVertical: 10 }}>No clinical photos uploaded yet.</Text>
+               ) : (
+                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 8 }}>
+                    {clinicalRecords.map((rec) => (
+                      <TouchableOpacity 
+                        key={rec.id} 
+                        style={styles.galleryItem}
+                        onPress={() => Alert.alert('Clinical Record', `Description: ${rec.description || 'No description'}\nUploaded: ${new Date(rec.timestamp).toLocaleString()}`)}
+                      >
+                        <Image source={{ uri: rec.image_url }} style={styles.galleryImg} contentFit="cover" />
+                        <View style={styles.galleryOverlay}>
+                           <Text style={styles.galleryTime} numberOfLines={1}>{new Date(rec.timestamp).toLocaleDateString()}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                 </ScrollView>
                )}
             </ClinicalCard>
           </View>
@@ -613,6 +910,37 @@ export default function DoctorDashboard() {
               </TouchableOpacity>
             )}
           </LinearGradient>
+
+          {/* Medication Compliance Summary (Clinical Review) */}
+          <ClinicalCard title="📈 Medication Compliance" theme={themeColors}>
+             <View style={styles.medSummaryGrid}>
+                <View style={[styles.medSummaryMain, { borderRightColor: themeColors.border }]}>
+                   <Text style={[styles.sectionLabel, { color: themeColors.muted }]}>NEXT SCHEDULED</Text>
+                   {medSummary.upcomingDose ? (
+                     <>
+                       <Text style={[styles.upcomingTime, { color: themeColors.tint }]}>{medSummary.upcomingDose.time}</Text>
+                       <Text style={[styles.upcomingMed, { color: themeColors.text }]} numberOfLines={1}>{medSummary.upcomingDose.name}</Text>
+                     </>
+                   ) : (
+                     <>
+                       <Text style={[styles.upcomingTime, { color: '#10B981' }]}>Complete</Text>
+                       <Text style={[styles.upcomingMed, { color: themeColors.muted }]}>All doses logged for today</Text>
+                     </>
+                   )}
+                </View>
+                <View style={styles.medSummaryStats}>
+                   <StatMini label="Taken" value={medSummary.takenCount} color="#10B981" icon="check-circle" isDark={isDark} />
+                   <StatMini label="Missed" value={medSummary.missedCount} color={themeColors.emergency || '#EF4444'} icon="cancel" isDark={isDark} />
+                   <StatMini label="Pending" value={medSummary.pendingCount} color={themeColors.tint} icon="schedule" isDark={isDark} />
+                </View>
+             </View>
+             
+             {medSummary.totalToday > 0 && (
+               <View style={styles.progressTrack}>
+                  <View style={[styles.progressBar, { width: `${(medSummary.takenCount / medSummary.totalToday) * 100}%`, backgroundColor: '#10B981' }]} />
+               </View>
+             )}
+          </ClinicalCard>
 
           {/* Medications Management */}
           <ClinicalCard title={t('common.medication')} theme={themeColors}>
@@ -649,7 +977,7 @@ export default function DoctorDashboard() {
                      </View>
                      <TouchableOpacity 
                         style={[styles.nudgeBtn, { backgroundColor: themeColors.tint + '15' }]}
-                        onPress={() => Alert.alert('Nudge Sent', `A medication reminder has been sent to ${selectedPatient.full_name}.`)}
+                        onPress={() => handleNudge(med.name)}
                       >
                         <MaterialIcons name="notifications-active" size={16} color={themeColors.tint} />
                      </TouchableOpacity>
@@ -783,1093 +1111,3 @@ export default function DoctorDashboard() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1
-  },
-  darkContainer: {
-    flex: 1,
-    backgroundColor: '#0F0F1A',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  scrollContent: {
-    padding: Spacing.lg
-  },
-  darkScrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-
-  // Premium Panel Header
-  panelHeader: {
-    paddingTop: 56,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    overflow: 'hidden',
-  },
-  panelGridLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  panelHeaderTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  panelHeaderLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  panelHeaderTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  panelLiveChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#10B98115',
-    borderWidth: 1,
-    borderColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  panelLiveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-  },
-  panelLiveText: {
-    color: '#10B981',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  panelStatsBar: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    padding: 14,
-  },
-  panelStatItem: { flex: 1 },
-  panelStatNum: { fontSize: 28, fontWeight: '800', color: '#fff' },
-  panelStatLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600', marginTop: 2 },
-
-  // Dark link banner
-  linkBannerDark: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(99,102,241,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.35)',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-  },
-  linkBannerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: 'rgba(99,102,241,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  linkBannerText: {
-    flex: 1,
-    color: '#818CF8',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  linkFormDark: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    gap: 12,
-  },
-  linkFormHint: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 13,
-  },
-  darkInput: {
-    height: 60,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  linkBtnDark: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  linkBtnGradient: {
-    height: 52,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  linkBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-
-  // Dark patient cards
-  darkSectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.4)',
-    letterSpacing: 2,
-    marginBottom: 10,
-    marginLeft: 4,
-  },
-  darkPatientCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    gap: 12,
-  },
-  darkPatientAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  darkPatientAvatarText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  darkPatientName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  darkPatientStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  darkStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-  },
-  darkPatientSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '500',
-  },
-  darkPatientArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Dark empty state
-  darkEmptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-    gap: 12,
-  },
-  darkEmptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(99,102,241,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  darkEmptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  darkEmptySubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  linkContainer: { 
-    flex: 1, 
-    padding: Spacing.xl, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 12 
-  },
-  linkEmoji: { 
-    fontSize: 64, 
-    marginBottom: 12 
-  },
-  linkTitle: { 
-    fontSize: 24, 
-    fontWeight: '800' 
-  },
-  linkSubtitle: { 
-    textAlign: 'center', 
-    marginBottom: 24 
-  },
-  input: { 
-    height: 60, 
-    width: '100%', 
-    borderRadius: BorderRadius.lg, 
-    paddingHorizontal: 20, 
-    borderWidth: 1, 
-    fontSize: 24, 
-    textAlign: 'center', 
-    fontWeight: '800' 
-  },
-  linkButton: { 
-    height: 60, 
-    width: '100%', 
-    borderRadius: BorderRadius.lg, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    ...Shadows.medium 
-  },
-  linkButtonText: { 
-    color: '#fff', 
-    fontSize: 18, 
-    fontWeight: '800' 
-  },
-  patientHeader: { 
-    padding: Spacing.md, 
-    borderRadius: BorderRadius.xl, 
-    borderWidth: 1, 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 20 
-  },
-  patientInfo: { 
-    gap: 4 
-  },
-  patientName: { 
-    fontSize: 18, 
-    fontWeight: '800' 
-  },
-  badgeRow: { 
-    flexDirection: 'row', 
-    gap: 6 
-  },
-  statusBadge: { 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: 6 
-  },
-  headerActions: { 
-    flexDirection: 'row', 
-    gap: 10 
-  },
-  actionIcon: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    ...Shadows.light 
-  },
-  analyticsSection: { 
-    gap: 16, 
-    marginBottom: 24 
-  },
-  wideAction: { 
-    height: 56, 
-    borderRadius: BorderRadius.lg, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    ...Shadows.light 
-  },
-  wideActionText: { 
-    color: '#fff', 
-    fontWeight: '800' 
-  },
-  linkBanner: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    margin: 16, 
-    marginBottom: 8, 
-    padding: 14, 
-    borderRadius: 14, 
-    borderWidth: 1.5 
-  },
-  linkFormInline: { 
-    marginHorizontal: 16, 
-    marginBottom: 12, 
-    padding: 16, 
-    borderRadius: 16, 
-    borderWidth: 1 
-  },
-  patientTab: { 
-    paddingHorizontal: 18, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
-    borderWidth: 1, 
-    marginRight: 8 
-  },
-  backBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginHorizontal: 16, 
-    marginTop: 12, 
-    marginBottom: 8, 
-    padding: 12, 
-    borderRadius: 12, 
-    borderWidth: 1 
-  },
-  patientListCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginHorizontal: 16, 
-    marginBottom: 10, 
-    padding: 16, 
-    borderRadius: 16, 
-    borderWidth: 1, 
-    gap: 12, 
-    ...Shadows.light 
-  },
-  patientListAvatar: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-
-  // Patient view styles
-  profileCard: { 
-    marginVertical: 20, 
-    padding: 30, 
-    borderRadius: 24, 
-    alignItems: 'center', 
-    borderWidth: 1, 
-    ...Shadows.medium 
-  },
-  avatarLarge: { 
-    width: 80, 
-    height: 80, 
-    borderRadius: 40, 
-    backgroundColor: '#6366F1', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 16 
-  },
-  avatarText: { 
-    color: '#fff', 
-    fontSize: 32, 
-    fontWeight: '800' 
-  },
-  doctorNameLarge: { 
-    fontSize: 22, 
-    fontWeight: '900', 
-    marginBottom: 4 
-  },
-  doctorTitle: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    marginBottom: 20 
-  },
-  statsRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    width: '100%', 
-    justifyContent: 'space-around' 
-  },
-  statItem: { 
-    alignItems: 'center' 
-  },
-  statValue: { 
-    fontSize: 16, 
-    fontWeight: '800' 
-  },
-  statLabel: { 
-    fontSize: 11, 
-    marginTop: 2 
-  },
-  statDivider: { 
-    width: 1, 
-    height: 24, 
-    backgroundColor: 'rgba(0,0,0,0.05)' 
-  },
-  infoSection: { 
-    marginBottom: 24 
-  },
-  infoTitle: { 
-    fontSize: 14, 
-    fontWeight: '800', 
-    marginBottom: 8 
-  },
-  infoText: { 
-    fontSize: 14, 
-    lineHeight: 22 
-  },
-  buttonGrid: { 
-    flexDirection: 'row', 
-    gap: 12, 
-    marginBottom: 12 
-  },
-  actionBtn: { 
-    flex: 1, 
-    height: 70, 
-    borderRadius: 16, 
-    borderWidth: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 4 
-  },
-  actionBtnText: { 
-    fontSize: 12, 
-    fontWeight: '700' 
-  },
-  mainChatBtn: { 
-    height: 60, 
-    borderRadius: 16, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    ...Shadows.light 
-  },
-  mainChatBtnText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: '800' 
-  },
-
-  // Demo styles
-  demoBadge: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F0F9FF', 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
-    borderRadius: 10, 
-    marginBottom: 16, 
-    borderWidth: 1, 
-    borderColor: '#BAE6FD', 
-    gap: 6 
-  },
-  demoBadgeText: { 
-    color: '#0369A1', 
-    fontSize: 12, 
-    fontWeight: '600' 
-  },
-  clinicalSection: { 
-    borderRadius: 20, 
-    padding: 16, 
-    marginBottom: 24, 
-    borderWidth: 1 
-  },
-  sectionHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 16 
-  },
-  sectionTitle: { 
-    fontSize: 16, 
-    fontWeight: '800' 
-  },
-  prescribeBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4, 
-    paddingHorizontal: 10, 
-    paddingVertical: 6, 
-    borderRadius: 8 
-  },
-  prescribeBtnText: { 
-    color: '#fff', 
-    fontSize: 11, 
-    fontWeight: '700' 
-  },
-  medicationList: { 
-    gap: 12 
-  },
-  medItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingBottom: 12, 
-    borderBottomWidth: 1 
-  },
-  medNameSmall: { 
-    fontSize: 14, 
-    fontWeight: '700' 
-  },
-  medSub: { 
-    fontSize: 12, 
-    marginTop: 2 
-  },
-  typeBadge: { 
-    paddingHorizontal: 6, 
-    paddingVertical: 2, 
-    borderRadius: 4 
-  },
-  typeBadgeText: { 
-    fontSize: 8, 
-    fontWeight: '800' 
-  },
-  emptyText: { 
-    textAlign: 'center', 
-    fontSize: 12, 
-    fontStyle: 'italic' 
-  },
-  insightTitle: { 
-    fontSize: 18, 
-    fontWeight: '800', 
-    marginTop: 12, 
-    marginBottom: 8 
-  },
-  summaryText: { 
-    fontSize: 14, 
-    lineHeight: 22, 
-    fontWeight: '500' 
-  },
-  summaryPlaceholder: { 
-    padding: 20, 
-    alignItems: 'center', 
-    borderStyle: 'dashed', 
-    borderWidth: 1, 
-    borderColor: '#ccc', 
-    borderRadius: 12 
-  },
-
-  // Premium Redesign Styles
-  premiumHeader: { 
-    position: 'absolute', 
-    top: 0, 
-    left: 0, 
-    right: 0, 
-    zIndex: 100, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
-    paddingTop: Platform.OS === 'ios' ? 54 : 44, 
-    paddingBottom: 16,
-  },
-  miniBackBtn: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  headerInfo: { 
-    flex: 1, 
-    marginHorizontal: 12 
-  },
-  headerPatientName: { 
-    fontSize: 18, 
-    fontWeight: '900', 
-    letterSpacing: -0.5 
-  },
-  headerControls: { 
-    flexDirection: 'row', 
-    gap: 10 
-  },
-  roundIconBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    ...Shadows.light 
-  },
-  scrollWithHeader: { 
-    padding: 20, 
-    paddingTop: Platform.OS === 'ios' ? 120 : 110, 
-    paddingBottom: 40 
-  },
-  glassCard: { 
-    borderRadius: 24, 
-    padding: 16, 
-    marginBottom: 20, 
-    borderWidth: 1, 
-    ...Shadows.light 
-  },
-  cardTitle: { 
-    fontSize: 14, 
-    fontWeight: '800', 
-    marginBottom: 12, 
-    opacity: 0.8, 
-    letterSpacing: 0.5, 
-    textTransform: 'uppercase' 
-  },
-  statusRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    marginTop: 2 
-  },
-  pulseContainer: { 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  pulseDot: { 
-    width: 6, 
-    height: 6, 
-    borderRadius: 3 
-  },
-  statusText: { 
-    fontSize: 11, 
-    fontWeight: '800', 
-    letterSpacing: 0.2 
-  },
-  gridRow: { 
-    flexDirection: 'row', 
-    gap: 16, 
-    marginBottom: 20 
-  },
-  statTile: { 
-    flex: 1, 
-    padding: 16, 
-    borderRadius: 20, 
-    borderWidth: 1, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: 8, 
-    ...Shadows.light 
-  },
-  statTileLabel: { 
-    fontSize: 12, 
-    fontWeight: '700' 
-  },
-  aiSummaryCard: { 
-    borderRadius: 24, 
-    padding: 20, 
-    marginBottom: 24, 
-    ...Shadows.medium 
-  },
-  aiHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 16 
-  },
-  aiLabel: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 12 
-  },
-  aiLabelText: { 
-    fontSize: 12, 
-    fontWeight: '800' 
-  },
-  aiText: { 
-    fontSize: 15, 
-    lineHeight: 24, 
-    fontWeight: '500' 
-  },
-  refreshBtn: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 18, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-
-  // Connectivity Card Styles
-  connectivityCard: { 
-    borderRadius: 24, 
-    padding: 20, 
-    marginTop: 10, 
-    marginBottom: 30, 
-    borderWidth: 2, 
-    borderStyle: 'dashed', 
-    alignItems: 'center' 
-  },
-  connectivityHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    marginBottom: 12 
-  },
-  connectivityTitle: { 
-    fontSize: 16, 
-    fontWeight: '800' 
-  },
-  connectivitySubtitle: { 
-    fontSize: 13, 
-    textAlign: 'center', 
-    lineHeight: 20, 
-    marginBottom: 20 
-  },
-  codeDisplay: { 
-    paddingHorizontal: 30, 
-    paddingVertical: 12, 
-    borderRadius: 16, 
-    borderWidth: 1, 
-    marginBottom: 12 
-  },
-  codeText: { 
-    fontSize: 32, 
-    fontWeight: '900', 
-    letterSpacing: 4 
-  },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  // Clinical Detail Specialized Styles
-  vitalsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-  },
-  vBlock: {
-    alignItems: 'center',
-  },
-  vBlockLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#94A3B8',
-    marginBottom: 4,
-  },
-  vBlockValue: {
-    fontSize: 24,
-    fontWeight: '900',
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  historyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  historyType: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  historyTime: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  statusTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  nudgeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  // ── PatientDoctorView styles ──────────────────────────────────────────────
-  mapContainer: {
-    height: Math.round(Dimensions.get('window').height * 0.38),
-    position: 'relative',
-  },
-  mapHeaderOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: Platform.OS === 'ios' ? 56 : 44,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-  },
-  mapTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  mapSubtitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  recenterBtn: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.light,
-  },
-  mapMarker: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'visible',
-  },
-  mapMarkerSelected: {
-    borderWidth: 3,
-    transform: [{ scale: 1.18 }],
-  },
-  mapMarkerInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  markerOnlineDot: {
-    position: 'absolute',
-    bottom: -1,
-    right: -1,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  mapCallout: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 56,
-  },
-  mapCalloutInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    padding: 12,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  calloutName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  calloutSpec: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  calloutChatBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#4338CA',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  calloutClose: {
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bottomSheet: {
-    flex: 1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -16,
-    paddingTop: 16,
-    overflow: 'hidden',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: Spacing.md,
-    marginBottom: 10,
-  },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterDropdown: {
-    marginHorizontal: Spacing.md,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  filterDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  filterDropdownText: {
-    fontSize: 14,
-  },
-  resultsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: Spacing.md,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  docCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 12,
-    marginBottom: 10,
-    ...Shadows.light,
-  },
-  docAvatarImg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  docAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  docAvatarText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  docNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
-  },
-  docName: {
-    fontSize: 15,
-    fontWeight: '700',
-    flex: 1,
-  },
-  docSpec: {
-    fontSize: 12,
-  },
-  onlinePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#10B98118',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  onlinePillDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  onlinePillText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  docChatBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 40,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  codeBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-  },
-  codeBarLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  codeBarValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    flex: 1,
-    letterSpacing: 2,
-  },
-});

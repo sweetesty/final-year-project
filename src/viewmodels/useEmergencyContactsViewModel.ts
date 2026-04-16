@@ -13,7 +13,7 @@ export const useEmergencyContactsViewModel = (patientId: string) => {
       .from('emergency_contacts')
       .select('*')
       .eq('patientid', patientId)          // DB: patientid (lowercase)
-      .order('created_at', { ascending: true }); // DB: created_at (underscore)
+      .order('createdat', { ascending: true }); // DB: createdat (no underscore)
 
     if (error) console.error('[EmergencyContacts] Fetch error:', error);
     // Map DB lowercase → camelCase for the UI
@@ -74,6 +74,6 @@ function mapRow(row: any): EmergencyContact {
     phone:        row.phone,
     relationship: row.relationship,
     isPrimary:    row.isprimary,
-    createdAt:    row.created_at, // Use created_at from SQL
+    createdAt:    row.createdat,
   };
 }

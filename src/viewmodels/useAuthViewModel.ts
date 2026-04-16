@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 export const useAuthViewModel = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<'patient' | 'doctor' | null>(null);
+  const [role, setRole] = useState<'patient' | 'doctor' | 'caregiver' | null>(null);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -79,7 +79,7 @@ export const useAuthViewModel = () => {
     email: string,
     password: string,
     fullName: string = '',
-    userRole: 'patient' | 'doctor' = 'patient',
+    userRole: 'patient' | 'doctor' | 'caregiver' = 'patient',
     location?: { latitude: number; longitude: number },
     specialization?: string,
   ) => {

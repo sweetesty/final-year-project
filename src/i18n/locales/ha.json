@@ -2,7 +2,8 @@
   "common": {
     "emergency": "Gaggawa",
     "doctor": "Likita na",
-    "message": "Aika sako zuwa ga likita",
+    "messages": "Saƙonni",
+    "message": "Aika sako zuwa ga majiyyaci",
     "chat": "Tattaunawar asibiti",
     "vitals": "Alamun lafiya",
     "loading": "Yana lodawa...",

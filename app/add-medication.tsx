@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  StyleSheet, View, Text, TextInput, TouchableOpacity,
+  ScrollView, Switch, KeyboardAvoidingView, Platform, Alert,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
+
+const DURATION_PRESETS = [3, 5, 7, 14, 30];
 
 export default function AddMedicationScreen() {
   const { mode, patientId: targetId } = useLocalSearchParams<{ mode?: string; patientId?: string }>();
@@ -15,7 +21,7 @@ export default function AddMedicationScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { session } = useAuthViewModel();
-  
+
   const activePatientId = targetId || session?.user?.id || '';
   const { addMedication } = useMedicationViewModel(activePatientId);
 
@@ -32,9 +38,30 @@ export default function AddMedicationScreen() {
   const [selectedTime, setSelectedTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  // Duration
+  const [durationEnabled, setDurationEnabled] = useState(false);
+  const [durationDays, setDurationDays] = useState(7);
+  const [customDuration, setCustomDuration] = useState('');
+  const [useCustom, setUseCustom] = useState(false);
+
+  const effectiveDuration = useCustom
+    ? parseInt(customDuration, 10) || 0
+    : durationDays;
+
+  const endDatePreview = () => {
+    if (!durationEnabled || effectiveDuration < 1) return null;
+    const d = new Date();
+    d.setDate(d.getDate() + effectiveDuration - 1);
+    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   const handleSave = async () => {
     if (!form.name || !form.dosage) {
-      alert('Please fill in required fields');
+      Alert.alert('Required', 'Please fill in medication name and dosage.');
+      return;
+    }
+    if (durationEnabled && effectiveDuration < 1) {
+      Alert.alert('Invalid Duration', 'Please enter a valid number of days.');
       return;
     }
 
@@ -49,30 +76,40 @@ export default function AddMedicationScreen() {
         frequency: form.frequency,
         times: [timeString],
         isPrescribed: isPrescribing,
-        prescribedBy: isPrescribing ? (session?.user?.user_metadata?.full_name || 'Dr. Wilson') : undefined
+        prescribedBy: isPrescribing
+          ? (session?.user?.user_metadata?.full_name || 'Doctor')
+          : undefined,
+        durationDays: durationEnabled ? effectiveDuration : undefined,
+        startDate: new Date().toISOString().split('T')[0],
       });
 
       Alert.alert(
-        t('common.success') === 'common.success' ? "Success" : t('common.success'),
-        isPrescribing ? "Prescription added successfully!" : "Medication added to your schedule!",
-        [{ text: "OK", onPress: () => router.back() }]
+        'Saved',
+        durationEnabled
+          ? `Reminders set for ${effectiveDuration} day${effectiveDuration > 1 ? 's' : ''} at ${timeString}.`
+          : isPrescribing
+          ? 'Prescription added successfully!'
+          : 'Medication added to your schedule!',
+        [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to save medication.");
+      Alert.alert('Error', error.message || 'Failed to save medication.');
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
-      <Stack.Screen options={{ 
-        title: isPrescribing ? t('common.add_prescription') : t('med.add'), 
-        headerShown: true 
+      <Stack.Screen options={{
+        title: isPrescribing ? t('common.add_prescription') : t('med.add'),
+        headerShown: true,
       }} />
-      
-      <ScrollView contentContainerStyle={styles.scrollInner}>
+
+      <ScrollView contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
+
+        {/* Name */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.name')} *</Text>
           <TextInput
@@ -80,10 +117,11 @@ export default function AddMedicationScreen() {
             placeholder="e.g. Aspirin"
             placeholderTextColor={themeColors.muted}
             value={form.name}
-            onChangeText={(v) => setForm({...form, name: v})}
+            onChangeText={(v) => setForm({ ...form, name: v })}
           />
         </View>
 
+        {/* Dosage */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.dosage')} *</Text>
           <TextInput
@@ -91,20 +129,22 @@ export default function AddMedicationScreen() {
             placeholder="e.g. 500mg, 1 tablet"
             placeholderTextColor={themeColors.muted}
             value={form.dosage}
-            onChangeText={(v) => setForm({...form, dosage: v})}
+            onChangeText={(v) => setForm({ ...form, dosage: v })}
           />
         </View>
 
+        {/* Time */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.time')}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.timeSelector, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
             onPress={() => setShowTimePicker(true)}
           >
-            <Text style={{ fontSize: 24, fontWeight: '800', color: themeColors.tint }}>
+            <MaterialIcons name="access-time" size={22} color={themeColors.tint} />
+            <Text style={{ fontSize: 28, fontWeight: '800', color: themeColors.tint }}>
               {selectedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
-            <Text style={{ color: themeColors.muted }}>{t('common.language') === 'Èdè' ? 'Fọwọ́tẹ̀ ẹ́ láti yí i padà' : 'Tap to change'}</Text>
+            <Text style={{ color: themeColors.muted, fontSize: 13 }}>Tap to change</Text>
           </TouchableOpacity>
           {showTimePicker && (
             <DateTimePicker
@@ -120,18 +160,110 @@ export default function AddMedicationScreen() {
           )}
         </View>
 
+        {/* ── Duration ── */}
+        <View style={[styles.durationCard, { backgroundColor: themeColors.card, borderColor: durationEnabled ? themeColors.tint : themeColors.border }]}>
+          <View style={styles.durationHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, { color: themeColors.text }]}>Set Duration</Text>
+              <Text style={{ color: themeColors.muted, fontSize: 12, marginTop: 2 }}>
+                {durationEnabled
+                  ? `Reminders for ${effectiveDuration} day${effectiveDuration !== 1 ? 's' : ''}`
+                  : 'Remind me indefinitely'}
+              </Text>
+            </View>
+            <Switch
+              value={durationEnabled}
+              onValueChange={setDurationEnabled}
+              trackColor={{ false: themeColors.border, true: themeColors.tint + '88' }}
+              thumbColor={durationEnabled ? themeColors.tint : themeColors.muted}
+            />
+          </View>
+
+          {durationEnabled && (
+            <>
+              {/* Preset chips */}
+              <View style={styles.presetRow}>
+                {DURATION_PRESETS.map(d => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[
+                      styles.presetChip,
+                      {
+                        backgroundColor: (!useCustom && durationDays === d) ? themeColors.tint : themeColors.background,
+                        borderColor: (!useCustom && durationDays === d) ? themeColors.tint : themeColors.border,
+                      },
+                    ]}
+                    onPress={() => { setDurationDays(d); setUseCustom(false); }}
+                  >
+                    <Text style={[
+                      styles.presetChipText,
+                      { color: (!useCustom && durationDays === d) ? '#fff' : themeColors.text },
+                    ]}>
+                      {d}d
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    styles.presetChip,
+                    {
+                      backgroundColor: useCustom ? themeColors.tint : themeColors.background,
+                      borderColor: useCustom ? themeColors.tint : themeColors.border,
+                    },
+                  ]}
+                  onPress={() => setUseCustom(true)}
+                >
+                  <Text style={[styles.presetChipText, { color: useCustom ? '#fff' : themeColors.text }]}>
+                    Custom
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Custom input */}
+              {useCustom && (
+                <View style={styles.customRow}>
+                  <TextInput
+                    style={[styles.customInput, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.background }]}
+                    placeholder="Number of days"
+                    placeholderTextColor={themeColors.muted}
+                    value={customDuration}
+                    onChangeText={setCustomDuration}
+                    keyboardType="number-pad"
+                  />
+                  <Text style={[{ color: themeColors.muted, fontSize: 15 }]}>days</Text>
+                </View>
+              )}
+
+              {/* End date preview */}
+              {effectiveDuration > 0 && endDatePreview() && (
+                <View style={[styles.endDateBadge, { backgroundColor: themeColors.tint + '12' }]}>
+                  <MaterialIcons name="event" size={16} color={themeColors.tint} />
+                  <Text style={{ color: themeColors.tint, fontSize: 13, fontWeight: '600' }}>
+                    Ends {endDatePreview()} · {effectiveDuration} reminder{effectiveDuration > 1 ? 's' : ''} will be scheduled
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Critical toggle */}
         <View style={[styles.toggleRow, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
           <View>
             <Text style={[styles.toggleLabel, { color: themeColors.text }]}>{t('med.critical')}</Text>
-            <Text style={{ color: themeColors.muted, fontSize: 12 }}>{isPrescribing ? 'Mark as clinical priority' : 'High-priority alarm sound'}</Text>
+            <Text style={{ color: themeColors.muted, fontSize: 12 }}>
+              {isPrescribing ? 'Mark as clinical priority' : 'High-priority alarm sound'}
+            </Text>
           </View>
           <Switch
             value={form.isCritical}
-            onValueChange={(v) => setForm({...form, isCritical: v})}
+            onValueChange={(v) => setForm({ ...form, isCritical: v })}
             trackColor={{ false: '#CBD5E0', true: themeColors.emergency }}
+            thumbColor={form.isCritical ? themeColors.emergency : themeColors.muted}
           />
         </View>
 
+        {/* Instructions */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>Additional Instructions</Text>
           <TextInput
@@ -139,16 +271,19 @@ export default function AddMedicationScreen() {
             placeholder="e.g. Take after meal"
             placeholderTextColor={themeColors.muted}
             value={form.instructions}
-            onChangeText={(v) => setForm({...form, instructions: v})}
+            onChangeText={(v) => setForm({ ...form, instructions: v })}
             multiline
           />
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.saveButton, { backgroundColor: themeColors.tint }]}
           onPress={handleSave}
         >
-          <Text style={styles.saveButtonText}>{isPrescribing ? t('common.add_prescription') : t('med.add')}</Text>
+          <MaterialIcons name="check-circle" size={22} color="#fff" />
+          <Text style={styles.saveButtonText}>
+            {isPrescribing ? t('common.add_prescription') : t('med.add')}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -156,59 +291,50 @@ export default function AddMedicationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollInner: {
-    padding: Spacing.lg,
-    gap: Spacing.xl,
-  },
-  section: {
-    gap: Spacing.xs,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  container: { flex: 1 },
+  scrollInner: { padding: Spacing.lg, gap: Spacing.xl, paddingBottom: 60 },
+  section: { gap: Spacing.xs },
+  label: { fontSize: 16, fontWeight: '700' },
   input: {
-    height: 52,
-    borderWidth: 1,
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
-    fontSize: 16,
+    height: 52, borderWidth: 1, borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md, fontSize: 16,
   },
   timeSelector: {
-    height: 100,
-    borderWidth: 1,
-    borderRadius: BorderRadius.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
+    height: 100, borderWidth: 1, borderRadius: BorderRadius.xl,
+    justifyContent: 'center', alignItems: 'center', gap: 4,
   },
+
+  // Duration card
+  durationCard: {
+    borderWidth: 1, borderRadius: BorderRadius.xl,
+    padding: Spacing.md, gap: 14,
+  },
+  durationHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  presetChip: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1,
+  },
+  presetChipText: { fontSize: 13, fontWeight: '700' },
+  customRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  customInput: {
+    flex: 1, height: 44, borderWidth: 1, borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md, fontSize: 16,
+  },
+  endDateBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    padding: 10, borderRadius: 10,
+  },
+
   toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: Spacing.md, borderRadius: BorderRadius.xl, borderWidth: 1,
   },
-  toggleLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  toggleLabel: { fontSize: 16, fontWeight: '700' },
   saveButton: {
-    height: 60,
-    borderRadius: BorderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xxl,
-    ...Shadows.medium,
+    height: 60, borderRadius: BorderRadius.full,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: 10, marginTop: Spacing.md, marginBottom: Spacing.xxl, ...Shadows.medium,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
+  saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 });

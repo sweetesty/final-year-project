@@ -18,6 +18,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { AudioMessage } from '@/src/components/AudioMessage';
 import { Image } from 'expo-image';
+import AgoraCallScreen from '@/src/components/AgoraCallScreen';
+import { AgoraCallService, CallType } from '@/src/services/AgoraCallService';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -99,7 +101,6 @@ export default function ChatRoomScreen() {
       try {
         const msgs = await ChatService.getMessages(chatId);
         setMessages(msgs);
-        // Mark received messages as read
         await ChatService.markAsRead(chatId, userId);
       } catch (err) {
         console.error(err);
@@ -110,25 +111,21 @@ export default function ChatRoomScreen() {
     };
     load();
 
-    // New message subscription
     const msgSub = ChatService.subscribeToChat(chatId, (newMsg) => {
       setMessages(prev => {
         if (prev.find(m => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      // Mark as read immediately if it's a received message
       if (newMsg.receiver_id === userId) {
         ChatService.markAsRead(chatId, userId);
       }
     });
 
-    // Read receipt subscription
     const readSub = ChatService.subscribeToReadReceipts(chatId, userId, (ids) => {
       setReadMessageIds(prev => new Set([...prev, ...ids]));
     });
 
-    // Presence
     const checkPresence = async () => {
       const { data } = await supabase.from('profiles').select('last_seen').eq('id', partnerId).single();
       updatePresence(data?.last_seen ?? null);
@@ -150,20 +147,21 @@ export default function ChatRoomScreen() {
   }, [chatId, session, userId, partnerId, updatePresence]);
 
   // ── Call state ─────────────────────────────────────────────────────────────
+  const [activeCall, setActiveCall] = useState<{ type: CallType; channel: string } | null>(null);
 
-  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected'>('idle');
-  const [callType, setCallType] = useState<'voice' | 'video'>('voice');
-  const [callDuration, setCallDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (callStatus === 'connected') interval = setInterval(() => setCallDuration(p => p + 1), 1000);
-    return () => clearInterval(interval);
-  }, [callStatus]);
-
-  const formatCallTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const startCall = async (type: CallType) => {
+    if (!userId || !partnerId) return;
+    const channel = AgoraCallService.getChannelName(userId, partnerId);
+    AgoraCallService.notifyCallee({
+      channelName: channel,
+      callType: type,
+      callerId: userId,
+      callerName: session?.user?.user_metadata?.full_name ?? 'Unknown',
+      calleeId: partnerId,
+      calleeName: partnerName ?? 'User',
+    }).catch(() => {});
+    setActiveCall({ type, channel });
+  };
 
   // ── Media ──────────────────────────────────────────────────────────────────
 
@@ -176,6 +174,33 @@ export default function ChatRoomScreen() {
       const url = await ChatService.uploadMedia(result.assets[0].uri, chatId, userId || 'anon', 'image');
       setIsUploading(false);
       if (url) handleSend(url, 'image');
+    }
+  };
+
+  const pickClinicalImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsEditing: true, quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      Alert.prompt(
+        'Add Description',
+        'Please describe what this photo shows (e.g. "Wound on left arm", "New prescription bottle").',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upload to Gallery',
+            onPress: async (desc?: string | { login: string; password: string }) => {
+              setIsUploading(true);
+              const record = await ChatService.uploadClinicalImage(result.assets[0].uri, userId, typeof desc === 'string' ? desc : 'Clinical photo');
+              setIsUploading(false);
+              if (record) {
+                handleSend(record.image_url, 'image');
+                Alert.alert('Saved', 'This photo has been added to your Clinical Gallery for doctor review.');
+              }
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -227,13 +252,15 @@ export default function ChatRoomScreen() {
     setInputText('');
     setMessages(prev => [...prev, newMsg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    try { await ChatService.sendMessage(newMsg); } catch (err) { console.error(err); }
+    try {
+      const senderName = session?.user?.user_metadata?.full_name ?? 'Someone';
+      await ChatService.sendMessage(newMsg, senderName);
+    } catch (err) { console.error(err); }
   };
 
   // ── Render message ─────────────────────────────────────────────────────────
 
   const renderItem = ({ item }: { item: ChatItem }) => {
-    // Date separator
     if ('type' in item && item.type === 'date_separator') {
       return (
         <View style={styles.dateSepRow}>
@@ -263,7 +290,6 @@ export default function ChatRoomScreen() {
           (isImageOnly || isAudio) && { padding: isAudio ? 10 : 0, overflow: 'hidden', backgroundColor: isAudio ? (isMe ? themeColors.tint : themeColors.card) : 'transparent' },
         ]}
       >
-        {/* Image */}
         {isImageOnly && (
           <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedImage(msg.attachment_url!)}>
             <View style={styles.imageBubbleWrap}>
@@ -275,12 +301,10 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Audio */}
         {isAudio && (
           <AudioMessage uri={msg.attachment_url!} isMe={isMe} timestamp={formatTimestamp(msg.timestamp)} />
         )}
 
-        {/* Text */}
         {!isImageOnly && !isAudio && (
           <View>
             <Text style={[styles.msgText, { color: isMe ? '#fff' : themeColors.text }]}>
@@ -295,7 +319,6 @@ export default function ChatRoomScreen() {
               <Text style={[styles.msgTime, { color: isMe ? 'rgba(255,255,255,0.65)' : themeColors.muted }]}>
                 {formatTimestamp(msg.timestamp)}
               </Text>
-              {/* Delivery / read ticks */}
               {isMe && (
                 <MaterialIcons
                   name={isRead ? 'done-all' : 'done'}
@@ -345,10 +368,10 @@ export default function ChatRoomScreen() {
           headerShown: true,
           headerRight: () => (
             <View style={{ flexDirection: 'row', gap: 18, marginRight: 8 }}>
-              <TouchableOpacity onPress={() => { setCallType('voice'); setCallStatus('calling'); setTimeout(() => setCallStatus('connected'), 2000); }}>
+              <TouchableOpacity onPress={() => startCall('voice')}>
                 <MaterialIcons name="phone" size={24} color={themeColors.tint} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setCallType('video'); setCallStatus('calling'); setTimeout(() => setCallStatus('connected'), 2500); }}>
+              <TouchableOpacity onPress={() => startCall('video')}>
                 <MaterialIcons name="videocam" size={26} color={themeColors.tint} />
               </TouchableOpacity>
             </View>
@@ -411,47 +434,16 @@ export default function ChatRoomScreen() {
         )}
       </View>
 
-      {/* ── Call overlay ── */}
-      {callStatus !== 'idle' && (
-        <Animated.View entering={FadeIn} style={[StyleSheet.absoluteFill, { backgroundColor: '#0F172A', zIndex: 1000 }]}>
-          {callType === 'video' && callStatus === 'connected' ? (
-            <LinearGradient colors={['#312E81', '#1E1B4B']} style={StyleSheet.absoluteFill} />
-          ) : (
-            <LinearGradient colors={['#1E293B', '#0F172A']} style={StyleSheet.absoluteFill} />
-          )}
-          <View style={styles.callContent}>
-            <View style={styles.callTop}>
-              <Text style={styles.callName}>{partnerName ?? t('common.doctor')}</Text>
-              <Text style={styles.callState}>
-                {callStatus === 'calling' ? 'Calling…' : formatCallTime(callDuration)}
-              </Text>
-              {callStatus === 'connected' && (
-                <View style={styles.secureBadge}>
-                  <MaterialIcons name="lock" size={11} color="#10B981" />
-                  <Text style={styles.secureText}>SECURE</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.callCenter}>
-              <View style={[styles.callAvatar, { borderColor: themeColors.tint }]}>
-                <Text style={styles.callAvatarText}>{(partnerName ?? 'D').charAt(0)}</Text>
-              </View>
-            </View>
-            <View style={styles.callBottom}>
-              <View style={styles.callActions}>
-                <TouchableOpacity style={[styles.callAction, isMuted && { backgroundColor: 'rgba(239,68,68,0.3)' }]} onPress={() => setIsMuted(p => !p)}>
-                  <MaterialIcons name={isMuted ? 'mic-off' : 'mic'} size={24} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.callAction, isSpeakerOn && { backgroundColor: themeColors.tint + '60' }]} onPress={() => setIsSpeakerOn(p => !p)}>
-                  <MaterialIcons name={isSpeakerOn ? 'volume-up' : 'volume-down'} size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.endCallBtn} onPress={() => { setCallStatus('idle'); setCallDuration(0); }}>
-                <MaterialIcons name="call-end" size={32} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Animated.View>
+      {/* ── Agora Call overlay ── */}
+      {activeCall && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1000 }]}>
+          <AgoraCallScreen
+            channelName={activeCall.channel}
+            callType={activeCall.type}
+            partnerName={partnerName ?? 'User'}
+            onEnd={() => setActiveCall(null)}
+          />
+        </View>
       )}
 
       {/* Full-screen image modal */}
@@ -474,12 +466,10 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   chatContent: { padding: Spacing.md, paddingBottom: Spacing.xl },
 
-  // Date separator
   dateSepRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 10, paddingHorizontal: 4 },
   dateSepLine: { flex: 1, height: 1 },
   dateSepLabel: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Message bubbles
   bubble: { maxWidth: '80%', padding: Spacing.md, borderRadius: BorderRadius.xl, marginBottom: Spacing.sm, ...Shadows.light },
   myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   partnerBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1 },
@@ -488,40 +478,21 @@ const styles = StyleSheet.create({
   msgTime: { fontSize: 10 },
   speakerBtn: { marginRight: 2 },
 
-  // Images
   imageBubbleWrap: { width: 220, height: 220, borderRadius: BorderRadius.xl, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.05)' },
   chatImage: { width: 220, height: 220 },
   imageOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 36, justifyContent: 'flex-end', padding: 6 },
   imageTimestamp: { color: '#fff', fontSize: 10, alignSelf: 'flex-end', fontWeight: '600' },
 
-  // Empty state
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, paddingHorizontal: 40 },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '700' },
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
-  // Input bar
   inputBar: { flexDirection: 'row', alignItems: 'center', padding: Spacing.sm, borderTopWidth: 1, gap: 8 },
   iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   input: { flex: 1, minHeight: 40, maxHeight: 100, paddingHorizontal: 12, fontSize: 15 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
 
-  // Call overlay
-  callContent: { flex: 1, padding: 40, justifyContent: 'space-between', paddingBottom: 60 },
-  callTop: { alignItems: 'center', marginTop: 20, gap: 6 },
-  callName: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  callState: { color: 'rgba(255,255,255,0.65)', fontSize: 15, fontWeight: '600' },
-  secureBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  secureText: { color: '#10B981', fontSize: 10, fontWeight: '800' },
-  callCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  callAvatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
-  callAvatarText: { color: '#fff', fontSize: 44, fontWeight: '800' },
-  callBottom: { alignItems: 'center', gap: 28 },
-  callActions: { flexDirection: 'row', gap: 20 },
-  callAction: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  endCallBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
-
-  // Image modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   modalClose: { position: 'absolute', top: 52, right: 20, zIndex: 10, padding: 8 },
   fullImage: { width: '100%', height: '100%' },

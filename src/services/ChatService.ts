@@ -1,6 +1,7 @@
 import { supabase } from './SupabaseService';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { NotificationService } from './NotificationService';
 
 export interface DirectMessage {
   id?: string;
@@ -22,15 +23,48 @@ export class ChatService {
     return [id1, id2].sort().join('_');
   }
 
-  static async sendMessage(msg: DirectMessage) {
+  static async sendMessage(msg: DirectMessage, senderName?: string) {
     const { data, error } = await supabase
       .from('direct_messages')
       .insert(msg)
       .select()
       .single();
-    
+
     if (error) throw error;
+
+    // Fire push notification to receiver (non-blocking)
+    this._notifyReceiver(msg, senderName).catch(() => {});
+
     return data;
+  }
+
+  private static async _notifyReceiver(msg: DirectMessage, senderName?: string) {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('push_token, full_name')
+        .eq('id', msg.receiver_id)
+        .single();
+
+      if (!profile?.push_token) return;
+
+      const displayName = senderName || 'Someone';
+      const isMedia = msg.attachment_type === 'image'
+        ? '📸 sent you an image'
+        : msg.attachment_type === 'audio'
+        ? '🎙️ sent you a voice note'
+        : null;
+      const body = isMedia ?? (msg.message_text || '...');
+
+      await NotificationService.sendPushToToken(
+        profile.push_token,
+        `💬 ${displayName}`,
+        body,
+        { chatId: msg.chat_id, partnerId: msg.sender_id, partnerName: displayName },
+      );
+    } catch (e) {
+      console.warn('[ChatService] push notify failed:', e);
+    }
   }
 
   static async getMessages(chatId: string) {
@@ -97,6 +131,59 @@ export class ChatService {
       console.error('[ChatService] upload error:', e);
       return null;
     }
+  }
+
+  /**
+   * Upload an image specifically intended for clinical review (wound, pill bottle, etc.)
+   */
+  static async uploadClinicalImage(uri: string, patientId: string, description: string) {
+    try {
+      const ext = uri.split('.').pop() || 'jpg';
+      const fileName = `${patientId}/clinical_${Date.now()}.${ext}`;
+      
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+      const arrayBuffer = decode(base64);
+
+      const { error: storageError } = await supabase.storage
+        .from('clinical-images')
+        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: false });
+
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('clinical-images')
+        .getPublicUrl(fileName);
+
+      // Save record to DB for the gallery
+      const { data, error: dbError } = await supabase
+        .from('clinical_records')
+        .insert({
+          patientid: patientId,
+          image_url: publicUrl,
+          description: description,
+          timestamp: new Date().toISOString(),
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+      return data;
+    } catch (e) {
+      console.error('[ChatService] clinical upload error:', e);
+      return null;
+    }
+  }
+
+  static async getClinicalRecords(patientId: string) {
+    const { data, error } = await supabase
+      .from('clinical_records')
+      .select('*')
+      .eq('patientid', patientId)
+      .order('timestamp', { ascending: false });
+    
+    if (error) throw error;
+    return data;
   }
 
   /**

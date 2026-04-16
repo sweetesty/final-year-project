@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTranslation } from 'react-i18next';
 
@@ -11,17 +12,26 @@ import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const themeColors = Colors[colorScheme ?? 'light'];
-  const { role } = useAuthViewModel();
+  const { role, loading } = useAuthViewModel();
   const { t } = useTranslation();
 
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: themeColors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={themeColors.tint} />
+      </View>
+    );
+  }
+
   const isDoctor = role === 'doctor';
+  const isCaregiver = role === 'caregiver';
+  const isPatient = role === 'patient';
 
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: themeColors.tint,
         headerShown: false,
-        tabBarButton: HapticTab,
         tabBarStyle: {
           backgroundColor: themeColors.card,
           borderTopColor: themeColors.border,
@@ -32,7 +42,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: t('tabs.home'),
-          href: isDoctor ? null : '/',
+          href: isPatient ? '/' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="home" size={size} color={color} />,
         }}
       />
@@ -50,7 +60,17 @@ export default function TabLayout() {
         name="doctor"
         options={{
           title: t('tabs.clinical_panel'),
+          href: isDoctor ? '/doctor' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="caregiver"
+        options={{
+          title: 'Caregiver',
+          href: isCaregiver ? '/caregiver' : null,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="family-restroom" size={size} color={color} />,
         }}
       />
 
@@ -66,8 +86,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="clinical-alerts"
         options={{
-          title: t('tabs.alerts'),
-          href: isDoctor ? '/clinical-alerts' : null,
+          title: isDoctor ? t('tabs.alerts') : 'Health History',
+          href: isDoctor || isCaregiver ? '/clinical-alerts' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="notification-important" size={size} color={color} />,
         }}
       />
@@ -76,7 +96,7 @@ export default function TabLayout() {
         name="medication"
         options={{
           title: t('tabs.medication'),
-          href: isDoctor ? null : '/medication',
+          href: isPatient ? '/medication' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="medication" size={size} color={color} />,
         }}
       />
@@ -84,9 +104,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="ai-chat"
         options={{
-          title: t('tabs.ai_chat'),
-          tabBarButton: () => null,
-          tabBarItemStyle: { display: 'none', width: 0 },
+          href: null,
         }}
       />
 
@@ -94,7 +112,7 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: t('tabs.pharmacy'),
-          href: isDoctor ? null : '/explore',
+          href: isPatient ? '/explore' : null,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="local-pharmacy" size={size} color={color} />,
         }}
       />

@@ -12,11 +12,16 @@
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
-          "fetch"
+          "fetch",
+          "audio"
         ],
         "NSMotionUsageDescription": "Allow Vitals Fusion to access motion data for fall detection and step counting.",
-        "NSAccelerometerUsageDescription": "Allow Vitals Fusion to access the accelerometer for health monitoring."
-      }
+        "NSAccelerometerUsageDescription": "Allow Vitals Fusion to access the accelerometer for health monitoring.",
+        "NSCameraUsageDescription": "Allow Vitals Fusion to use the camera for video consultations.",
+        "NSMicrophoneUsageDescription": "Allow Vitals Fusion to use the microphone for voice and video consultations."
+      },
+      "bundleIdentifier": "com.nathanakin.finalyearproject",
+      "appleTeamId": "87ZGXK2YP3"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,8 +34,13 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.ACTIVITY_RECOGNITION"
-      ]
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "package": "com.nathanakin.finalyearproject"
     },
     "web": {
       "output": "static",

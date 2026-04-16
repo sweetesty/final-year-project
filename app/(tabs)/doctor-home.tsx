@@ -37,21 +37,52 @@ export default function DoctorHomeScreen() {
   const [stats, setStats] = useState({ patients: 0, alerts: 0 });
   const [linkedPatients, setLinkedPatients] = useState<any[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const doctorName = session?.user?.user_metadata?.full_name || 'Doctor';
-  const firstName = doctorName.split(' ')[0];
+  const rawName = session?.user?.user_metadata?.full_name || 'Doctor';
+  
+  // Helper to ensure we don't double up on "Dr."
+  const cleanName = (name: string) => {
+    if (!name) return 'Doctor';
+    if (name.toLowerCase() === 'doctor') return 'Doctor';
+    return name.replace(/^(Doctor|Dr\.?)\s+/i, '').trim();
+  };
+
+  const displayName = cleanName(rawName) === 'Doctor' 
+    ? 'Doctor' 
+    : `Dr. ${cleanName(rawName).split(' ')[0]}`;
 
   const h = new Date().getHours();
   const greeting = h < 12 ? t('home.welcome') : h < 17 ? t('home.good_afternoon') : t('home.good_evening');
 
-  const load = useCallback(async () => {
+  const refreshAlertsOnly = useCallback(async () => {
     if (!session?.user?.id) return;
-    setLoading(true);
     try {
-      const patients = await DoctorService.getLinkedPatients(session.user.id);
+      const alerts = await DoctorService.getUnresolvedAlerts(session.user.id);
+      setActiveAlerts(alerts);
+      setStats(prev => ({ ...prev, alerts: alerts.length }));
+    } catch (e) {
+      console.error('[DoctorHome] Alert refresh error:', e);
+    }
+  }, [session]);
+
+  const load = useCallback(async (isSilent = false) => {
+    if (!session?.user?.id) return;
+    if (!isSilent) setLoading(true);
+    try {
+      const [patients, alerts, requests] = await Promise.all([
+        DoctorService.getLinkedPatients(session.user.id),
+        DoctorService.getUnresolvedAlerts(session.user.id),
+        DoctorService.getPendingRequests(session.user.id)
+      ]);
+
+      setActiveAlerts(alerts);
+      setPendingRequests(requests);
+      setStats({ patients: patients.length, alerts: alerts.length });
+
       const enhanced = await Promise.all(
         patients.map(async (p) => {
           const ctx = await DoctorService.getPatientClinicalContext(p.id);
@@ -59,11 +90,8 @@ export default function DoctorHomeScreen() {
         })
       );
       setLinkedPatients(enhanced);
-      const alerts = await DoctorService.getUnresolvedAlerts(session.user.id);
-      setActiveAlerts(alerts);
-      setStats({ patients: patients.length, alerts: alerts.length });
     } catch (e) {
-      console.error('[DoctorHome]', e);
+      console.error('[DoctorHome] Full load error:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -73,18 +101,29 @@ export default function DoctorHomeScreen() {
   useEffect(() => {
     if (!session?.user?.id) return;
     const channel = supabase.channel('doctor-home-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fall_events' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fall_events' }, (payload) => {
+        // Optimistic State Filter: If an alert is updated to resolved, remove it instantly from UI
+        if (payload.eventType === 'UPDATE' && (payload.new.status === 'resolved' || payload.new.resolved)) {
+           setActiveAlerts(prev => prev.filter(a => a.id !== payload.new.id));
+           setStats(prev => ({ ...prev, alerts: Math.max(0, prev.alerts - 1) }));
+        }
+        // Always trigger a clean fetch to ensure sync
+        refreshAlertsOnly();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'doctor_requests', filter: `doctor_id=eq.${session.user.id}` }, () => {
+        load(true);
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [session, load]);
+  }, [session, refreshAlertsOnly]);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAcceptAlert = async (alertId: string) => {
+  const handleAcceptAlert = async (alertId: string, patientId: string, patientName: string) => {
     try {
       await DoctorService.acceptAlert(alertId, session!.user.id);
-      Alert.alert('Case Accepted', 'You have been assigned. Contact the patient immediately.');
-      load();
+      refreshAlertsOnly(); // Targeted refresh
+      router.push({ pathname: '/emergency-case', params: { patientId, patientName, alertId } });
     } catch { Alert.alert('Error', 'Could not accept alert.'); }
   };
 
@@ -112,7 +151,7 @@ export default function DoctorHomeScreen() {
         <Animated.View entering={FadeIn.duration(500)} style={styles.headerTop}>
           <View>
             <Text style={styles.headerGreeting}>{greeting}</Text>
-            <Text style={styles.headerName}>Dr. {firstName}</Text>
+            <Text style={styles.headerName}>{displayName}</Text>
             <View style={styles.livePill}>
               <PulseDot color="#34D399" />
               <Text style={styles.livePillText}>Clinical Dashboard</Text>
@@ -152,6 +191,34 @@ export default function DoctorHomeScreen() {
 
       <View style={styles.body}>
 
+        {/* ── Connection Requests Banner ──────────────────────────── */}
+        {pendingRequests.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(400)} style={styles.requestBanner}>
+            <LinearGradient
+              colors={['#4338CA', '#6366F1']}
+              style={styles.requestBannerInner}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.requestBannerIcon}>
+                <MaterialIcons name="person-add" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.requestBannerTitle}>
+                  {pendingRequests.length} Pending {pendingRequests.length === 1 ? 'Request' : 'Requests'}
+                </Text>
+                <Text style={styles.requestBannerSub}>Patients want to connect with your clinic</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.reviewBtn}
+                onPress={() => router.push('/connection-requests')}
+              >
+                <Text style={styles.reviewBtnText}>Review</Text>
+                <MaterialIcons name="chevron-right" size={16} color="#4338CA" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        )}
+
         {/* ── Active Emergencies ──────────────────────────────────── */}
         {activeAlerts.length > 0 && (
           <Animated.View entering={FadeInDown.duration(400)}>
@@ -179,7 +246,7 @@ export default function DoctorHomeScreen() {
                     </View>
                   </View>
                   <View style={styles.emergencyActions}>
-                    <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: '#DC2626' }]} onPress={() => handleAcceptAlert(alert.id)}>
+                    <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: '#DC2626' }]} onPress={() => handleAcceptAlert(alert.id, alert.patientid, alert.profiles?.full_name ?? 'Unknown Patient')}>
                       <MaterialIcons name="check-circle" size={16} color="#fff" />
                       <Text style={styles.emergencyBtnText}>{t('doctor.accept_case')}</Text>
                     </TouchableOpacity>
@@ -404,4 +471,11 @@ const styles = StyleSheet.create({
   quickCard: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 10, alignItems: 'flex-start', ...Shadows.light },
   quickIconWrap: { width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   quickLabel: { fontSize: 14, fontWeight: '700' },
+  requestBanner: { marginBottom: 20, borderRadius: 20, ...Shadows.medium },
+  requestBannerInner: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, gap: 12 },
+  requestBannerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  requestBannerTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  requestBannerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600', marginTop: 1 },
+  reviewBtn: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  reviewBtnText: { color: '#4338CA', fontSize: 13, fontWeight: '800' },
 });

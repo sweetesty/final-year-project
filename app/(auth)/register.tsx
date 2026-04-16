@@ -16,7 +16,7 @@ import Animated, {
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
 const { width: SW, height: SH } = Dimensions.get('window');
-type Role = 'patient' | 'doctor';
+type Role = 'patient' | 'doctor' | 'caregiver';
 
 // ─── Floating icon bubbles (same as login) ────────────────────────────────────
 type IconName =
@@ -94,6 +94,27 @@ function PhotoCard({ uri, x, y, rotate, delay, size }: typeof PHOTO_CARDS[0]) {
   );
 }
 
+const Field = ({ icon, placeholder, value, onChangeText, secure, showToggle, onToggle, keyboardType, autoCapitalize }: any) => (
+  <View style={styles.inputWrap}>
+    <MaterialIcons name={icon} size={18} color="rgba(255,255,255,0.3)" style={styles.inputIcon} />
+    <TextInput
+      style={[styles.input, { flex: 1, color: '#fff' }]}
+      placeholder={placeholder}
+      placeholderTextColor="rgba(255,255,255,0.25)"
+      value={value}
+      onChangeText={onChangeText}
+      secureTextEntry={secure}
+      keyboardType={keyboardType ?? 'default'}
+      autoCapitalize={autoCapitalize ?? 'sentences'}
+    />
+    {showToggle !== undefined && (
+      <TouchableOpacity onPress={onToggle} style={styles.eyeBtn}>
+        <MaterialIcons name={showToggle ? 'visibility-off' : 'visibility'} size={18} color="rgba(255,255,255,0.3)" />
+      </TouchableOpacity>
+    )}
+  </View>
+);
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function RegisterScreen() {
   const router = useRouter();
@@ -137,27 +158,6 @@ export default function RegisterScreen() {
       setError(e.message ?? 'Registration failed. Please try again.');
     } finally { setLoading(false); }
   };
-
-  const Field = ({ icon, placeholder, value, onChangeText, secure, showToggle, onToggle, keyboardType, autoCapitalize }: any) => (
-    <View style={styles.inputWrap}>
-      <MaterialIcons name={icon} size={18} color="rgba(255,255,255,0.3)" style={styles.inputIcon} />
-      <TextInput
-        style={[styles.input, { flex: 1 }]}
-        placeholder={placeholder}
-        placeholderTextColor="rgba(255,255,255,0.25)"
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secure}
-        keyboardType={keyboardType ?? 'default'}
-        autoCapitalize={autoCapitalize ?? 'sentences'}
-      />
-      {showToggle !== undefined && (
-        <TouchableOpacity onPress={onToggle} style={styles.eyeBtn}>
-          <MaterialIcons name={showToggle ? 'visibility-off' : 'visibility'} size={18} color="rgba(255,255,255,0.3)" />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.root}>
@@ -211,7 +211,7 @@ export default function RegisterScreen() {
 
           {/* Role selector */}
           <View style={styles.roleRow}>
-            {(['patient', 'doctor'] as Role[]).map(r => (
+            {(['patient', 'caregiver', 'doctor'] as Role[]).map(r => (
               <TouchableOpacity
                 key={r}
                 style={[styles.roleBtn, role === r && styles.roleBtnActive]}
@@ -219,15 +219,15 @@ export default function RegisterScreen() {
                 activeOpacity={0.8}
               >
                 {role === r && (
-                  <LinearGradient colors={['#4338CA', '#6366F1']} style={StyleSheet.absoluteFill} borderRadius={12} />
+                  <LinearGradient colors={['#4338CA', '#6366F1']} style={[StyleSheet.absoluteFill, { borderRadius: 12 }]} />
                 )}
                 <MaterialIcons
-                  name={r === 'patient' ? 'personal-injury' : 'medical-services'}
+                  name={r === 'patient' ? 'personal-injury' : r === 'caregiver' ? 'family-restroom' : 'medical-services'}
                   size={16}
                   color={role === r ? '#fff' : 'rgba(255,255,255,0.4)'}
                 />
                 <Text style={[styles.roleBtnText, role === r && { color: '#fff' }]}>
-                  {r === 'patient' ? 'Patient' : 'Doctor'}
+                  {r === 'patient' ? 'Patient' : r === 'caregiver' ? 'Caregiver' : 'Doctor'}
                 </Text>
               </TouchableOpacity>
             ))}

@@ -2,7 +2,8 @@
   "common": {
     "emergency": "Mberede",
     "doctor": "Dọkịta m",
-    "message": "Zitere dọkịta ozi",
+    "messages": "Ozi",
+    "message": "Zitere onye ọrịa ozi",
     "chat": "Nkata gbasara ahụike",
     "vitals": "Ihe ịrịba ama ndụ",
     "loading": "Ọ na-ebu...",

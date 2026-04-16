@@ -17,8 +17,10 @@ export const useFallDetectionViewModel = (
 ) => {
   const [state,      setState]      = useState<FallDetectionState>('idle');
   const [lastGForce, setLastGForce] = useState(0);
+  const [countdown,  setCountdown]  = useState(20);
 
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stateRef    = useRef<FallDetectionState>('idle'); // mirror for use inside callbacks
 
   // Keep stateRef in sync
@@ -81,7 +83,7 @@ export const useFallDetectionViewModel = (
           body: JSON.stringify(tokens.map((token: string) => ({
             to: token, priority: 'high', sound: 'default',
             title: 'EMERGENCY: Fall Detected',
-            body:  `${patientName} has fallen. Location: ${mapsLink}`,
+            body:  `${patientName} has fallen at ${new Date().toLocaleString()}. Location: ${mapsLink}`,
             data:  { type: 'fall_alert', patientId, mapsLink },
           }))),
         });
@@ -93,7 +95,9 @@ export const useFallDetectionViewModel = (
   // ── Cancel ────────────────────────────────────────────────────────────────
   const cancelAlert = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     setState('idle');
+    setCountdown(20);
     stateRef.current = 'idle';
     SpeechService.speak("Glad you're okay. I'll keep monitoring.");
   }, []);
@@ -118,6 +122,18 @@ export const useFallDetectionViewModel = (
     ];
     SpeechService.speak(triagePhrases[Math.floor(Math.random() * triagePhrases.length)]);
 
+    setCountdown(20);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(intervalRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     timerRef.current = setTimeout(() => { triggerEmergency(); }, RESPONSE_WINDOW_MS);
   }, [patientName, triggerEmergency]);
 
@@ -135,6 +151,7 @@ export const useFallDetectionViewModel = (
       SensorService.stopMonitoring();
       SignalService.clearFallCallback();
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [onFallConfirmed]);
 
@@ -143,6 +160,7 @@ export const useFallDetectionViewModel = (
     lastGForce,
     cancelAlert,
     triggerEmergency,
+    countdown,
     isUserActive: SignalService.isUserActive(),
   };
 };

@@ -1,6 +1,9 @@
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import { documentDirectory, getInfoAsync, makeDirectoryAsync, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
+import {
+  documentDirectory, getInfoAsync, makeDirectoryAsync,
+  writeAsStringAsync, readDirectoryAsync, EncodingType,
+} from 'expo-file-system/legacy';
 import { encode } from 'base64-arraybuffer';
 import i18n from '@/src/i18n';
 
@@ -9,9 +12,12 @@ const CACHE_DIR = documentDirectory + 'yarn_tts_cache/';
 
 let _sound: Audio.Sound | null = null;
 let _audioModeSet = false;
-let _cacheDirReady = false;
+let _initDone = false;
 
-// In-flight fetch deduplication: cacheKey → Promise<string> (uri)
+// In-memory set of filenames confirmed to exist on disk — skips getInfoAsync on repeat calls
+const _memCache = new Set<string>();
+
+// In-flight fetch deduplication: key → Promise<string (uri)>
 const _inflight = new Map<string, Promise<string>>();
 
 function _getCacheKey(text: string, locale: string): string {
@@ -22,11 +28,19 @@ function _getCacheKey(text: string, locale: string): string {
   return `yarn_${locale}_${clean}_${hash}.mp3`;
 }
 
-async function _ensureCacheDir() {
-  if (_cacheDirReady) return;
-  const info = await getInfoAsync(CACHE_DIR);
-  if (!info.exists) await makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-  _cacheDirReady = true;
+// Run once: create cache dir + load existing filenames into _memCache
+async function _init() {
+  if (_initDone) return;
+  _initDone = true;
+  try {
+    const info = await getInfoAsync(CACHE_DIR);
+    if (!info.exists) {
+      await makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+    } else {
+      const files = await readDirectoryAsync(CACHE_DIR);
+      for (const f of files) _memCache.add(f);
+    }
+  } catch (_) {}
 }
 
 async function _ensureAudioMode() {
@@ -42,19 +56,22 @@ async function _stopCurrent() {
   }
 }
 
-// Returns the local URI for the audio, fetching only once per unique text+locale.
 function _getAudioUri(text: string, locale: string): Promise<string> {
   const key = _getCacheKey(text, locale);
   const uri = CACHE_DIR + key;
 
-  // Return existing in-flight promise for this key (deduplicates rapid taps)
+  // Memory cache hit — no async work needed
+  if (_memCache.has(key)) return Promise.resolve(uri);
+
+  // Reuse in-flight promise for identical requests
   if (_inflight.has(key)) return _inflight.get(key)!;
 
   const promise = (async (): Promise<string> => {
     try {
-      await _ensureCacheDir();
-      const cached = await getInfoAsync(uri);
-      if (cached.exists) return uri;
+      await _init();
+
+      // Re-check memory cache after init (another call may have populated it)
+      if (_memCache.has(key)) return uri;
 
       const response = await fetch(`${TTS_BACKEND_URL}/api/tts/speak`, {
         method: 'POST',
@@ -66,6 +83,9 @@ function _getAudioUri(text: string, locale: string): Promise<string> {
 
       const base64 = encode(await response.arrayBuffer());
       await writeAsStringAsync(uri, base64, { encoding: EncodingType.Base64 });
+
+      // Register in memory cache so next call is instant
+      _memCache.add(key);
       return uri;
     } finally {
       _inflight.delete(key);
@@ -86,10 +106,20 @@ function _fallbackSpeak(text: string, lng?: string) {
 }
 
 export class SpeechService {
+  /** Call once at app startup to seed memory cache and wake the Render instance. */
+  static async init() {
+    // Seed memory cache from disk in background
+    _init().catch(() => {});
+
+    // Ping the backend to wake Render's free-tier instance before user taps anything
+    if (TTS_BACKEND_URL) {
+      fetch(`${TTS_BACKEND_URL}/health`).catch(() => {});
+    }
+  }
+
   static async speak(text: string, lng?: string) {
     if (!text) return;
 
-    // Stop whatever is currently playing immediately — don't await the fetch first
     _stopCurrent();
     Speech.stop();
 
@@ -101,14 +131,11 @@ export class SpeechService {
     }
 
     try {
-      // Kick off audio fetch (or reuse in-flight) and audio mode setup in parallel
       const [uri] = await Promise.all([
         _getAudioUri(text, language),
         _ensureAudioMode(),
       ]);
 
-      // If the user tapped again while we were fetching, _sound will have changed
-      // — just play the latest request.
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true, volume: 1.0 },
@@ -136,7 +163,7 @@ export class SpeechService {
     }
   }
 
-  /** Pre-warm the cache for a piece of text (call when screen loads). */
+  /** Pre-fetch audio for a piece of text silently (e.g. when screen loads or language changes). */
   static prefetch(text: string, lng?: string) {
     if (!TTS_BACKEND_URL || !text) return;
     const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';

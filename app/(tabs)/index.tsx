@@ -186,6 +186,9 @@ export default function HomeScreen() {
   }, [fallState]);
   const alertStyle = useAnimatedStyle(() => ({ transform: [{ translateY: alertY.value }] }));
 
+  // Wake Render instance + seed disk cache into memory on mount
+  useEffect(() => { SpeechService.init(); }, []);
+
   // Patient code
   useEffect(() => {
     if (!patientid) return;
@@ -680,6 +683,16 @@ export default function HomeScreen() {
                   onPress={() => {
                     i18n.changeLanguage(lang.id);
                     setLangModalVisible(false);
+                    // Pre-fetch the briefing audio in the new language so first tap is instant
+                    const hrText = t('common.hr_is', { hr: vitals.heartrate });
+                    const statusText = t('common.status_is', { status: zone.label });
+                    const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
+                    const nextMed = medications.length > 0 ? medications[0] : null;
+                    const medText = nextMed
+                      ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
+                      : t('common.no_more_meds');
+                    const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
+                    SpeechService.prefetch(fullText, lang.id);
                   }}
                 >
                   <Text style={[styles.historyLabel, { color: C.text }]}>{lang.flag}  {lang.name}</Text>

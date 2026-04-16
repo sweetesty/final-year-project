@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TouchableOpacity,
   ActivityIndicator, Dimensions, Alert, Linking, ScrollView, Vibration, Share,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT, MapPlaceholder, mapsAvailable } from '@/src/components/MapViewCompat';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -42,7 +42,7 @@ export default function LiveTrackingScreen() {
   const patientName = (params.patientName as string) || session?.user?.user_metadata?.full_name || 'Patient';
   const isSelf = patientId === session?.user?.id;
 
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
   const [safeZoneCenter, setSafeZoneCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -275,7 +275,9 @@ export default function LiveTrackingScreen() {
       <Stack.Screen options={{ title: isSelf ? 'Safety & SOS' : `${patientName}'s Location`, headerShown: true }} />
 
       {/* Map */}
-      {location ? (
+      {!mapsAvailable ? (
+        <View style={[styles.map]}><MapPlaceholder label="Map requires a dev build" /></View>
+      ) : location ? (
         <MapView
           ref={mapRef}
           provider={PROVIDER_DEFAULT}

@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ActivityIndicator,
   ScrollView, Alert, Platform,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+const NearbyDoctorsMap = lazy(() => import('@/src/components/maps/NearbyDoctorsMap'));
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Spacing, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius } from '@/src/constants/theme';
 import { DoctorService } from '@/src/services/DoctorService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
@@ -31,7 +31,7 @@ export default function NearbyDoctorsScreen() {
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
   const { session } = useAuthViewModel();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [doctors, setDoctors] = useState<NearbyDoctor[]>([]);
@@ -39,6 +39,7 @@ export default function NearbyDoctorsScreen() {
   const [helpSent, setHelpSent] = useState(false);
   const [helpCooldown, setHelpCooldown] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<NearbyDoctor | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     init();
@@ -60,18 +61,31 @@ export default function NearbyDoctorsScreen() {
       const nearby = await DoctorService.getNearbyDoctors(coords.latitude, coords.longitude, 25);
       setDoctors(nearby as NearbyDoctor[]);
 
-      // Centre map on user
-      mapRef.current?.animateToRegion({
-        ...coords,
-        latitudeDelta: 0.08,
-        longitudeDelta: 0.08,
-      }, 800);
+      // Centre map on user only if ready
+      if (mapReady) {
+        mapRef.current?.animateToRegion({
+          ...coords,
+          latitudeDelta: 0.08,
+          longitudeDelta: 0.08,
+        }, 800);
+      }
     } catch (e) {
       console.error('[NearbyDoctors] init error:', e);
     } finally {
       setLoading(false);
     }
   };
+
+  // Ensure zoom happens once both location and map are ready
+  useEffect(() => {
+    if (mapReady && myLocation) {
+      mapRef.current?.animateToRegion({
+        ...myLocation,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      }, 500);
+    }
+  }, [mapReady, myLocation]);
 
   const handleHelpSignal = async () => {
     if (!myLocation || !session?.user?.id) return;
@@ -124,7 +138,7 @@ export default function NearbyDoctorsScreen() {
           headerTitle: '',
           headerLeft: () => (
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
               style={styles.backBtn}
             >
               <MaterialIcons name="arrow-back" size={22} color="#fff" />
@@ -134,45 +148,18 @@ export default function NearbyDoctorsScreen() {
       />
 
       {/* Map */}
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        provider={PROVIDER_DEFAULT}
-        showsUserLocation
-        showsMyLocationButton={false}
-        initialRegion={
-          myLocation
-            ? { ...myLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
-            : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
-        }
-      >
-        {/* 25km search radius */}
-        {myLocation && (
-          <Circle
-            center={myLocation}
-            radius={25000}
-            strokeColor="rgba(99,102,241,0.4)"
-            fillColor="rgba(99,102,241,0.06)"
-            strokeWidth={1.5}
+      <View style={StyleSheet.absoluteFill}>
+        <Suspense fallback={<View style={[styles.mapPlaceholder, { backgroundColor: '#0F0F1A' }]}><ActivityIndicator size="small" color="#6366F1" /></View>}>
+          <NearbyDoctorsMap
+            ref={mapRef}
+            myLocation={myLocation}
+            doctors={doctors}
+            setSelectedDoctor={setSelectedDoctor}
+            isOnline={isOnline}
+            onMapReady={() => setMapReady(true)}
           />
-        )}
-
-        {/* Doctor markers */}
-        {doctors.map(doc => (
-          <Marker
-            key={doc.id}
-            coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
-            onPress={() => setSelectedDoctor(doc)}
-          >
-            <View style={[styles.doctorMarker, { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]}>
-              <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.doctorMarkerInner}>
-                <MaterialIcons name="medical-services" size={16} color="#fff" />
-              </LinearGradient>
-              <View style={[styles.markerOnlineDot, { backgroundColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]} />
-            </View>
-          </Marker>
-        ))}
-      </MapView>
+        </Suspense>
+      </View>
 
       {/* Loading overlay */}
       {loading && (
@@ -314,6 +301,7 @@ export default function NearbyDoctorsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0F0F1A' },
+  mapPlaceholder: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
 
   backBtn: {
     width: 36,

@@ -8,6 +8,9 @@ import { SmsService } from '../services/SmsService';
 import { supabase } from '../services/SupabaseService';
 import { AiModelService } from '../services/AiModelService';
 import { SignalService } from '../services/SignalService';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
+import { OpenAiService } from '../services/OpenAiService';
 
 const RESPONSE_WINDOW_MS = 20_000;
 
@@ -18,6 +21,7 @@ export const useFallDetectionViewModel = (
   const [state,      setState]      = useState<FallDetectionState>('idle');
   const [lastGForce, setLastGForce] = useState(0);
   const [countdown,  setCountdown]  = useState(20);
+  const { t } = useTranslation();
 
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,7 +37,7 @@ export const useFallDetectionViewModel = (
   const triggerEmergency = useCallback(async () => {
     setState('emergency_triggered');
     stateRef.current = 'emergency_triggered';
-    SpeechService.speak("I couldn't reach you. Alerting your emergency contacts now. Please stay calm.");
+    SpeechService.speak(t('fall.dispatch_speak'));
 
     const coords   = await LocationService.trackLocation(patientId);
     const mapsLink = coords
@@ -57,9 +61,10 @@ export const useFallDetectionViewModel = (
       .single();
 
     if (contact) {
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       await SmsService.sendEmergencySms(
         contact.phone,
-        `EMERGENCY: ${patientName} has fallen at ${new Date().toLocaleString()}.\nLocation: ${mapsLink}\nPlease respond immediately.`,
+        t('fall.dispatch_sms', { name: patientName, time: timeStr, link: mapsLink, lng: 'en' }),
       );
     }
 
@@ -82,8 +87,8 @@ export const useFallDetectionViewModel = (
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(tokens.map((token: string) => ({
             to: token, priority: 'high', sound: 'default',
-            title: 'EMERGENCY: Fall Detected',
-            body:  `${patientName} has fallen at ${new Date().toLocaleString()}. Location: ${mapsLink}`,
+            title: t('fall.dispatch_notification_title', { lng: 'en' }),
+            body:  t('fall.dispatch_notification_body', { name: patientName, time: new Date().toLocaleTimeString(), link: mapsLink, lng: 'en' }),
             data:  { type: 'fall_alert', patientId, mapsLink },
           }))),
         });
@@ -99,7 +104,7 @@ export const useFallDetectionViewModel = (
     setState('idle');
     setCountdown(20);
     stateRef.current = 'idle';
-    SpeechService.speak("Glad you're okay. I'll keep monitoring.");
+    SpeechService.speak(t('fall.cancel_speak'));
   }, []);
 
   // ── Fall confirmed by SignalService state machine ─────────────────────────
@@ -113,14 +118,26 @@ export const useFallDetectionViewModel = (
     stateRef.current = 'user_response_window';
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-    // Voice triage — local phrases, no API call (avoids quota errors + zero latency)
-    const triagePhrases = [
-      `${patientName}, I detected a fall. Are you okay? If you need help, stay still. I'll alert your contacts in 20 seconds. Tap cancel if you're fine.`,
-      `Hey ${patientName}, it looks like you may have fallen. Please don't worry, I'm here. Tap the cancel button if you're alright, otherwise I'll call for help shortly.`,
-      `${patientName}, are you okay? I noticed a sudden impact. Stay calm — I'm giving you 20 seconds to let me know you're fine before I alert your emergency contacts.`,
-    ];
-    SpeechService.speak(triagePhrases[Math.floor(Math.random() * triagePhrases.length)]);
+    
+    // Voice triage - Dynamic for English (Groq), Static for others
+    const currentLang = (i18n?.language || 'en').toLowerCase();
+    if (currentLang.startsWith('en')) {
+      OpenAiService.getInitialFallComfort(patientName)
+        .then(msg => SpeechService.speak(msg, 'en'))
+        .catch(err => {
+          console.warn('[FallDetection] Dynamic triage failed, using fallback:', err);
+          const triageIndex = Math.floor(Math.random() * 3) + 1;
+          SpeechService.speak(t(`fall.triage_${triageIndex}`, { name: patientName }), 'en');
+        });
+    } else {
+      const triageIndex = Math.floor(Math.random() * 3) + 1;
+      const triageText = t(`fall.triage_${triageIndex}`, { name: patientName });
+      console.log('[FallDetection] Triage language info:', { 
+        currentLanguage: currentLang, 
+        triageText 
+      });
+      SpeechService.speak(triageText, currentLang);
+    }
 
     setCountdown(20);
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -146,10 +163,12 @@ export const useFallDetectionViewModel = (
     SensorService.startMonitoring((data) => {
       SignalService.addSample(data); // state machine runs inside addSample
     });
+    console.log('[FallDetection] Sensor monitoring STARTED');
 
     return () => {
       SensorService.stopMonitoring();
       SignalService.clearFallCallback();
+      console.log('[FallDetection] Sensor monitoring STOPPED');
       if (timerRef.current) clearTimeout(timerRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

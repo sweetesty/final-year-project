@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Spacing, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface AudioMessageProps {

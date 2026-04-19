@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy, useCallback } from 'react';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList, RefreshControl } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+
+// Lazy load the Map component to prevent RNMapsAirModule crash during route discovery
+const DoctorMap = lazy(() => import('@/src/components/maps/DoctorMap'));
+
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
 import { DoctorService } from '@/src/services/DoctorService';
@@ -15,7 +18,7 @@ import { useVitalsViewModel } from '@/src/viewmodels/useVitalsViewModel';
 import { AnalyticsService } from '@/src/services/AnalyticsService';
 import { ChatService } from '@/src/services/ChatService';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { NotificationService } from '@/src/services/NotificationService';
 import AgoraCallScreen from '@/src/components/AgoraCallScreen';
@@ -116,7 +119,8 @@ const styles = StyleSheet.create({
   nudgeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
 
   // PatientDoctorView specialized styles
-  mapContainer: { height: Math.round(Dimensions.get('window').height * 0.38), position: 'relative' },
+  mapContainer: { height: Dimensions.get('window').height * 0.4, width: '100%', position: 'relative' },
+  mapPlaceholder: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   mapHeaderOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: Platform.OS === 'ios' ? 56 : 44, paddingBottom: 20, paddingHorizontal: 16 },
   mapTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
   mapSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
@@ -214,7 +218,7 @@ const SPECIALTIES = [
 
 // ─── Patient-facing Find Doctor screen ───────────────────────────────────────
 function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router, themeColors, isDark, t }: any) {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [nearbyDoctors, setNearbyDoctors] = useState<any[]>([]);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -222,6 +226,7 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
   const [selectedMarker, setSelectedMarker] = useState<any | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   // Derive specialties that actually exist in data
   const availableSpecialties = useMemo(() => {
@@ -245,7 +250,9 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
         setMyLocation(coords);
         const nearby = await DoctorService.getNearbyDoctors(coords.latitude, coords.longitude, 25);
         setNearbyDoctors(nearby);
-        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 800);
+        if (mapReady) {
+          mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 800);
+        }
       }
     } catch (e) {
       console.warn('[PatientDoctorView] location fetch failed (expected in simulators):', e);
@@ -253,6 +260,15 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
       setLocationLoading(false);
     }
   };
+
+  // Re-run animation once map becomes ready if we have location
+  const [hasCentered, setHasCentered] = useState(false);
+  useEffect(() => {
+    if (mapReady && myLocation && !hasCentered) {
+      mapRef.current?.animateToRegion({ ...myLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 500);
+      setHasCentered(true);
+    }
+  }, [mapReady, myLocation, hasCentered]);
 
   const filteredDoctors = useMemo(() => {
     let list = activeFilter === 'Nearby'
@@ -302,37 +318,17 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
 
       {/* ── Map (top half) ── */}
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFill}
-          provider={PROVIDER_DEFAULT}
-          showsUserLocation
-          showsMyLocationButton={false}
-          initialRegion={
-            myLocation
-              ? { ...myLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
-              : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
-          }
-        >
-          {mapDoctors.map((doc: any) => (
-            <Marker
-              key={doc.id}
-              coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
-              onPress={() => focusDoctor(doc)}
-            >
-              <View style={[
-                styles.mapMarker,
-                selectedMarker?.id === doc.id && styles.mapMarkerSelected,
-                { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' },
-              ]}>
-                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.mapMarkerInner}>
-                  <MaterialIcons name="medical-services" size={14} color="#fff" />
-                </LinearGradient>
-                {isOnline(doc.last_seen) && <View style={styles.markerOnlineDot} />}
-              </View>
-            </Marker>
-          ))}
-        </MapView>
+        <Suspense fallback={<View style={[styles.mapPlaceholder, { backgroundColor: themeColors.background }]}><ActivityIndicator size="small" color={themeColors.tint} /></View>}>
+          <DoctorMap
+            ref={mapRef}
+            myLocation={myLocation}
+            mapDoctors={mapDoctors}
+            selectedMarker={selectedMarker}
+            focusDoctor={focusDoctor}
+            isOnline={isOnline}
+            onMapReady={() => setMapReady(true)}
+          />
+        </Suspense>
 
         {/* Map header overlay */}
         <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={styles.mapHeaderOverlay}>
@@ -536,6 +532,7 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
 
 export default function DoctorDashboard() {
   console.log('[DoctorDashboard] Component Mounting...');
+  const mapRef = useRef<any>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
@@ -562,7 +559,7 @@ export default function DoctorDashboard() {
   }, [params.patientId, linkedPatients]);
 
   // Fetch patient meds for clinical review
-  const { medications: patientMeds, summary: medSummary } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
+  const { medications: patientMeds, summary: medSummary, refresh: medRefresh } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
   const { chartData: patientChartData } = useVitalsViewModel(selectedPatient?.id || '');
   const [myCode, setMyCode] = useState<string>(''); // Patient's own link code
   const [linkCode, setLinkCode] = useState<string>(''); // Input field for linking
@@ -571,8 +568,22 @@ export default function DoctorDashboard() {
   const [showLinkForm, setShowLinkForm] = useState(false);
 
   useEffect(() => {
+    // Fail-safe: Never stay stuck on loading for more than 6 seconds
+    const timer = setTimeout(() => {
+      if (loading) {
+        console.warn('[DoctorDashboard] Loading timed out. Forcing UI display.');
+        setLoading(false);
+      }
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  useEffect(() => {
     if (session?.user?.id) {
-      if (role === 'doctor') {
+      const normalizedRole = role?.toLowerCase();
+      // If we don't have a role yet, we still want to try loading something
+      // so the screen doesn't stay blank.
+      if (normalizedRole === 'doctor') {
         loadPatients();
       } else {
         loadDoctor();
@@ -580,36 +591,60 @@ export default function DoctorDashboard() {
     }
   }, [session, role]);
 
-  const loadDoctor = async () => {
-    setLoading(true);
+  const loadDoctor = async (silent = false) => {
+    if (!session?.user?.id) return;
+    if (!silent) setLoading(true);
     try {
       const [linkedDocs, allDocs, code] = await Promise.all([
-        DoctorService.getLinkedDoctors(session!.user.id),
+        DoctorService.getLinkedDoctors(session.user.id),
         DoctorService.getAllDoctors(),
-        DoctorService.ensurePatientCode(session!.user.id),
+        DoctorService.ensurePatientCode(session.user.id),
       ]);
       setDoctors(linkedDocs);
-      setAllDoctors(allDocs); // always populate — map needs doctors regardless of link status
+      setAllDoctors(allDocs);
       setMyCode(code);
     } catch (e) {
-      console.error(e);
+      console.error('[DoctorDashboard] loadDoctor error:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadPatients = async () => {
-    setLoading(true);
+  const loadPatients = async (silent = false) => {
+    if (!session?.user?.id) return;
+    // Only show full-screen spinner if we have no patients and it's not a silent refresh
+    if (!silent && linkedPatients.length === 0) setLoading(true);
+    
     try {
-      const patients = await DoctorService.getLinkedPatients(session!.user.id);
+      console.log('[DoctorDashboard] Loading patients for doctor:', session.user.id);
+      const patients = await DoctorService.getLinkedPatients(session.user.id);
       setLinkedPatients(patients);
-      // Removed auto-select to allow viewing the full list first
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('[DoctorDashboard] loadPatients error:', error);
+      // Only alert if this was a manual/non-silent load to avoid interrupting the user
+      if (!silent) {
+        Alert.alert('Load Error', error.message || 'Failed to load clinical panel.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Instant refresh when returning from detail/edit screens
+  useFocusEffect(
+    useCallback(() => {
+      const normalizedRole = role?.toLowerCase();
+      if (session?.user?.id && normalizedRole === 'doctor') {
+        if (!selectedPatient) {
+          loadPatients(true); // Silent refresh on focus
+        } else {
+          // If we are in the detail view, refresh the medications too
+          console.log('[DoctorDashboard] Refreshing meds for focused patient:', selectedPatient.id);
+          medRefresh();
+        }
+      }
+    }, [session?.user?.id, role, selectedPatient, medRefresh])
+  );
 
   const handleLinkPatient = async () => {
     if (!linkCode) return;
@@ -711,10 +746,23 @@ export default function DoctorDashboard() {
     }
   };
 
-  if (loading) return <View style={styles.centered}><ActivityIndicator color={themeColors.tint} /></View>;
+  // ─── Render ───
+  if (!session) return null;
+  
+  // Only show the global loading spinner if we literally don't have a role yet
+  // Once we know the role, we let the inner components manage their own loading (silently)
+  if (loading && !role) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={themeColors.tint} />
+      </View>
+    );
+  }
 
   // ─── Patient View ──────────────────────────────────────────────────────────
-  if (role === 'patient') {
+  const normalizedRole = role?.toLowerCase();
+  
+  if (normalizedRole === 'patient') {
     return (
       <PatientDoctorView
         allDoctors={allDoctors}
@@ -1024,6 +1072,14 @@ export default function DoctorDashboard() {
       <ScrollView
         contentContainerStyle={styles.darkScrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadPatients}
+            tintColor="#6366F1"
+            colors={["#6366F1"]}
+          />
+        }
       >
         {/* Link Another Patient Banner */}
         <TouchableOpacity
@@ -1075,8 +1131,17 @@ export default function DoctorDashboard() {
             </View>
             <Text style={styles.darkEmptyTitle}>No Linked Patients</Text>
             <Text style={styles.darkEmptySubtitle}>
-              Tap "Link Another Patient" above to begin clinical monitoring.
+              Tap "Link Another Patient" above or pull down to refresh.
             </Text>
+            <TouchableOpacity 
+              style={[styles.linkBtnDark, { marginTop: 20, width: 160 }]} 
+              onPress={loadPatients}
+            >
+              <View style={[styles.linkBtnGradient, { borderRadius: 12, height: 40 }]}>
+                <MaterialIcons name="refresh" size={18} color="#fff" />
+                <Text style={styles.linkBtnText}>Refresh List</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         ) : (
           <>

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -15,7 +15,11 @@ import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 const DURATION_PRESETS = [3, 5, 7, 14, 30];
 
 export default function AddMedicationScreen() {
-  const { mode, patientId: targetId } = useLocalSearchParams<{ mode?: string; patientId?: string }>();
+  const { mode, patientId: targetId, medicationId } = useLocalSearchParams<{ 
+    mode?: string; 
+    patientId?: string; 
+    medicationId?: string; 
+  }>();
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
@@ -23,9 +27,10 @@ export default function AddMedicationScreen() {
   const { session } = useAuthViewModel();
 
   const activePatientId = targetId || session?.user?.id || '';
-  const { addMedication } = useMedicationViewModel(activePatientId);
+  const { addMedication, updateMedication, deleteMedication, medications, loading } = useMedicationViewModel(activePatientId);
 
   const isPrescribing = mode === 'prescribe';
+  const isEditing = mode === 'edit' && !!medicationId;
 
   const [form, setForm] = useState({
     name: '',
@@ -43,6 +48,41 @@ export default function AddMedicationScreen() {
   const [durationDays, setDurationDays] = useState(7);
   const [customDuration, setCustomDuration] = useState('');
   const [useCustom, setUseCustom] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // Load existing data for Edit Mode
+  React.useEffect(() => {
+    if (isEditing && medications.length > 0 && !hasLoaded) {
+      const med = medications.find(m => m.id === medicationId);
+      if (med) {
+        setForm({
+          name: med.name,
+          dosage: med.dosage,
+          instructions: med.instructions || '',
+          isCritical: med.isCritical || false,
+          frequency: (med.frequency as any) || 'daily',
+        });
+        
+        if (med.times && med.times.length > 0) {
+          const [h, m] = med.times[0].split(':').map(Number);
+          const d = new Date();
+          d.setHours(h, m, 0, 0);
+          setSelectedTime(d);
+        }
+
+        if (med.durationDays) {
+          setDurationEnabled(true);
+          if (DURATION_PRESETS.includes(med.durationDays)) {
+            setDurationDays(med.durationDays);
+          } else {
+            setUseCustom(true);
+            setCustomDuration(med.durationDays.toString());
+          }
+        }
+        setHasLoaded(true);
+      }
+    }
+  }, [isEditing, medications, medicationId, hasLoaded]);
 
   const effectiveDuration = useCustom
     ? parseInt(customDuration, 10) || 0
@@ -68,24 +108,37 @@ export default function AddMedicationScreen() {
     const timeString = `${selectedTime.getHours().toString().padStart(2, '0')}:${selectedTime.getMinutes().toString().padStart(2, '0')}`;
 
     try {
-      await addMedication({
-        name: form.name,
-        dosage: form.dosage,
-        instructions: form.instructions,
-        isCritical: form.isCritical,
-        frequency: form.frequency,
-        times: [timeString],
-        isPrescribed: isPrescribing,
-        prescribedBy: isPrescribing
-          ? (session?.user?.user_metadata?.full_name || 'Doctor')
-          : undefined,
-        durationDays: durationEnabled ? effectiveDuration : undefined,
-        startDate: new Date().toISOString().split('T')[0],
-      });
+      if (isEditing) {
+        await updateMedication(medicationId!, {
+          name: form.name,
+          dosage: form.dosage,
+          instructions: form.instructions,
+          isCritical: form.isCritical,
+          frequency: form.frequency,
+          times: [timeString],
+        });
+      } else {
+        await addMedication({
+          name: form.name,
+          dosage: form.dosage,
+          instructions: form.instructions,
+          isCritical: form.isCritical,
+          frequency: form.frequency,
+          times: [timeString],
+          isPrescribed: isPrescribing,
+          prescribedBy: isPrescribing
+            ? (session?.user?.user_metadata?.full_name || 'Doctor')
+            : undefined,
+          durationDays: durationEnabled ? effectiveDuration : undefined,
+          startDate: new Date().toISOString().split('T')[0],
+        });
+      }
 
       Alert.alert(
         'Saved',
-        durationEnabled
+        isEditing 
+          ? 'Medication updated successfully'
+          : durationEnabled
           ? `Reminders set for ${effectiveDuration} day${effectiveDuration > 1 ? 's' : ''} at ${timeString}.`
           : isPrescribing
           ? 'Prescription added successfully!'
@@ -97,13 +150,31 @@ export default function AddMedicationScreen() {
     }
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Medication',
+      'Are you sure you want to remove this medication from the profile?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: async () => {
+            await deleteMedication(medicationId!);
+            router.back();
+          } 
+        }
+      ]
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
       <Stack.Screen options={{
-        title: isPrescribing ? t('common.add_prescription') : t('med.add'),
+        title: isEditing ? 'Edit Medication' : isPrescribing ? t('common.add_prescription') : t('med.add'),
         headerShown: true,
       }} />
 
@@ -282,9 +353,19 @@ export default function AddMedicationScreen() {
         >
           <MaterialIcons name="check-circle" size={22} color="#fff" />
           <Text style={styles.saveButtonText}>
-            {isPrescribing ? t('common.add_prescription') : t('med.add')}
+            {isEditing ? 'Update Medication' : isPrescribing ? t('common.add_prescription') : t('med.add')}
           </Text>
         </TouchableOpacity>
+
+        {isEditing && (
+          <TouchableOpacity
+            style={[styles.deleteButton, { borderColor: themeColors.emergency }]}
+            onPress={handleDelete}
+          >
+            <MaterialIcons name="delete-outline" size={20} color={themeColors.emergency} />
+            <Text style={[styles.deleteButtonText, { color: themeColors.emergency }]}>Delete Medication</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -337,4 +418,11 @@ const styles = StyleSheet.create({
     gap: 10, marginTop: Spacing.md, marginBottom: Spacing.xxl, ...Shadows.medium,
   },
   saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  deleteButton: {
+    height: 56, borderRadius: BorderRadius.full,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: 10, marginTop: -Spacing.md, marginBottom: Spacing.xxl,
+    borderWidth: 1.5,
+  },
+  deleteButtonText: { fontSize: 16, fontWeight: '700' },
 });

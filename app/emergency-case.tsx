@@ -3,13 +3,13 @@ import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Linking, Alert, Dimensions, Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+
 import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { DoctorService } from '@/src/services/DoctorService';
@@ -51,7 +51,7 @@ export default function EmergencyCaseScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [doctorLocation, setDoctorLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -62,6 +62,22 @@ export default function EmergencyCaseScreen() {
   const [emergencyContacts, setEmergencyContacts] = useState<any[]>([]);
   const [vitals, setVitals] = useState<any>(null);
   const [resolving, setResolving] = useState(false);
+  const [mapComponents, setMapComponents] = useState<{ MapView: any, Marker: any, Polyline: any, PROVIDER_DEFAULT: any } | null>(null);
+
+  // Safe Map Loader
+  useEffect(() => {
+    try {
+      const Maps = require('react-native-maps');
+      setMapComponents({
+        MapView: Maps.default,
+        Marker: Maps.Marker,
+        Polyline: Maps.Polyline,
+        PROVIDER_DEFAULT: Maps.PROVIDER_DEFAULT
+      });
+    } catch (e) {
+      console.warn('[EmergencyCase] Maps not available in this environment');
+    }
+  }, []);
 
   // Load all patient data
   useEffect(() => {
@@ -128,17 +144,20 @@ export default function EmergencyCaseScreen() {
   }, [patientId]);
 
   // Fit map to show both markers once data loads
+  const [hasCentered, setHasCentered] = useState(false);
   useEffect(() => {
-    if (!patientLocation) return;
+    if (!patientLocation || hasCentered) return;
     const coords = [patientLocation];
     if (doctorLocation) coords.push(doctorLocation);
+    
+    setHasCentered(true);
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
         edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
         animated: true,
       });
     }, 600);
-  }, [patientLocation, doctorLocation]);
+  }, [patientLocation, doctorLocation, hasCentered]);
 
   const openInMaps = () => {
     if (!patientLocation) return;
@@ -194,7 +213,10 @@ export default function EmergencyCaseScreen() {
       {/* ── Header ── */}
       <LinearGradient colors={['#450a0a', '#7f1d1d', '#991b1b']} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity 
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} 
+            style={styles.backBtn}
+          >
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
@@ -229,49 +251,53 @@ export default function EmergencyCaseScreen() {
 
         {/* ── Map ── */}
         <Animated.View entering={FadeInDown.duration(400)} style={styles.mapCard}>
-          {patientLocation ? (
-            <MapView
-              ref={mapRef}
-              provider={PROVIDER_DEFAULT}
-              style={styles.map}
-              initialRegion={{
-                ...patientLocation,
-                latitudeDelta: 0.04,
-                longitudeDelta: 0.04,
-              }}
-            >
-              {/* Route line */}
-              {route && (
-                <Polyline
-                  coordinates={route}
-                  strokeColor="#EF4444"
-                  strokeWidth={3}
-                  lineDashPattern={[8, 4]}
-                />
-              )}
-
-              {/* Patient marker */}
-              <Marker coordinate={patientLocation} title={`🆘 ${patientName}`} anchor={{ x: 0.5, y: 0.5 }}>
-                <View style={styles.patientMarker}>
-                  <MaterialIcons name="person-pin" size={28} color="#EF4444" />
+              {patientLocation && mapComponents?.MapView ? (
+                <mapComponents.MapView
+                  ref={mapRef}
+                  provider={mapComponents.PROVIDER_DEFAULT}
+                  style={styles.map}
+                  initialRegion={{
+                    ...patientLocation,
+                    latitudeDelta: 0.04,
+                    longitudeDelta: 0.04,
+                  }}
+                >
+                  {/* Route line */}
+                  {route && mapComponents.Polyline && (
+                    <mapComponents.Polyline
+                      coordinates={route}
+                      strokeColor="#EF4444"
+                      strokeWidth={3}
+                      lineDashPattern={[8, 4]}
+                    />
+                  )}
+    
+                  {/* Patient marker */}
+                  {mapComponents.Marker && (
+                    <mapComponents.Marker coordinate={patientLocation} title={`🆘 ${patientName}`} anchor={{ x: 0.5, y: 0.5 }}>
+                      <View style={styles.patientMarker}>
+                        <MaterialIcons name="person-pin" size={28} color="#EF4444" />
+                      </View>
+                    </mapComponents.Marker>
+                  )}
+    
+                  {/* Doctor marker */}
+                  {doctorLocation && mapComponents.Marker && (
+                    <mapComponents.Marker coordinate={doctorLocation} title="Your Location" anchor={{ x: 0.5, y: 0.5 }}>
+                      <View style={styles.doctorMarker}>
+                        <MaterialIcons name="local-hospital" size={18} color="#fff" />
+                      </View>
+                    </mapComponents.Marker>
+                  )}
+                </mapComponents.MapView>
+              ) : (
+                <View style={[styles.map, styles.noMap]}>
+                  <MaterialIcons name="location-off" size={36} color="#64748B" />
+                  <Text style={{ color: '#94A3B8', marginTop: 8 }}>
+                    {!mapComponents?.MapView ? 'Map initialization skipped (Native maps missing)' : 'Patient location unavailable'}
+                  </Text>
                 </View>
-              </Marker>
-
-              {/* Doctor marker */}
-              {doctorLocation && (
-                <Marker coordinate={doctorLocation} title="Your Location" anchor={{ x: 0.5, y: 0.5 }}>
-                  <View style={styles.doctorMarker}>
-                    <MaterialIcons name="local-hospital" size={18} color="#fff" />
-                  </View>
-                </Marker>
               )}
-            </MapView>
-          ) : (
-            <View style={[styles.map, styles.noMap]}>
-              <MaterialIcons name="location-off" size={36} color={themeColors.muted} />
-              <Text style={{ color: themeColors.muted, marginTop: 8 }}>Patient location unavailable</Text>
-            </View>
-          )}
 
           {/* Distance + nav button overlay */}
           {dist && (

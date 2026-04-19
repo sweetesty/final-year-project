@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY || '';
+console.log('[GroqService] API Key Initialization:', GROQ_API_KEY ? 'LOADED (Active)' : 'MISSING (Check .env)');
 
 // Groq handles both text and vision — OpenAI-compatible endpoint
 const groq = new OpenAI({
@@ -78,23 +79,31 @@ export class OpenAiService {
     }
   }
 
+  static async getInitialFallComfort(patientName: string): Promise<string> {
+    const prompt = `A fall was just detected for ${patientName}. Provide a 1-sentence, extremely comforting, and professional response to check if they are okay and tell them not to move. Be warm like a clinical companion.`;
+    return this.sendMessage(prompt, 'EMERGENCY INITIAL CONTACT');
+  }
+
   static async getEmergencyTriage(userInput: string, vitals: string): Promise<string> {
     const prompt = `EMERGENCY ALERT: A fall was detected. The patient says: "${userInput}".
 Vitals at time of fall: ${vitals}.
-Provide a 1-2 sentence response that is extremely comforting and assesses their consciousness.`;
+Provide a 1-2 sentence response that is extremely comforting and assesses their consciousness. Do not use special characters or asterisks.`;
 
     return this.sendMessage(prompt, 'EMERGENCY CRITICAL STATE');
   }
 
   static async generateClinicalNarrative(healthData: any): Promise<string> {
+    console.log('[GroqService] Attempting to generate clinical narrative...');
     try {
       if (!GROQ_API_KEY) {
+        console.warn('[GroqService] MISSING API KEY in environment.');
         return "AI summary requires a configured Groq API key.";
       }
+      console.log('[GroqService] Requesting from llama-3.3-70b-versatile...');
       const prompt = `
-You are a Clinical Data Auditor. Review this patient's 7-day health data and write a concise, professional clinical narrative for the doctor.
-Highlight key correlations (e.g., missed medications correlating with reported symptoms or vitals changes).
-Keep it mostly objective, empathetic but highly clinical. Maximum 3-4 short sentences. No introductory fluff.
+You are a warm, professional Clinical Companion. Review the patient's current health data and write a 2-3 sentence personalized health briefing spoken directly to them.
+Encourage them based on their vitals and remind them of their status in a comforting way.
+Keep it concise and conversational. No introductory fluff. Avoid jargon.
 
 PATIENT DATA:
 ${JSON.stringify(healthData)}
@@ -106,7 +115,10 @@ ${JSON.stringify(healthData)}
         max_tokens: 300,
       });
 
-      return response.choices[0]?.message?.content || "Could not generate narrative.";
+      const content = response.choices[0]?.message?.content || "I'm having trouble analyzing the clinical data right now.";
+      console.log('[GroqService] Received narrative length:', content.length);
+      // Sanitize for TTS (remove markdown asterisks, etc.)
+      return content.replace(/\*/g, '').replace(/#/g, '').trim();
     } catch (error) {
       console.error('[GroqService] Clinical Narrative Error:', error);
       return "I'm having trouble analyzing the clinical data right now.";

@@ -73,7 +73,7 @@
     "skip_now": "Skip for now"
   },
   "med": {
-    "schedule": "Daily Schedule",
+    "schedule": "Daily Medication",
     "name": "Medication Name",
     "dosage": "Dosage",
     "critical": "Critical",
@@ -174,5 +174,17 @@
     "checkout": "Checkout",
     "in_stock": "In Stock",
     "out_of_stock": "Out of Stock"
+  },
+  "fall": {
+    "triage_1": "{{name}}, I detected a fall. Are you okay? If you need help, stay still. I'll alert your contacts in 20 seconds. Tap cancel if you're fine.",
+    "triage_2": "Hey {{name}}, it looks like you may have fallen. Please don't worry, I'm here. Tap the cancel button if you're alright, otherwise I'll call for help shortly.",
+    "triage_3": "{{name}}, are you okay? I noticed a sudden impact. Stay calm — I'm giving you 20 seconds to let me know you're fine before I alert your emergency contacts.",
+    "dispatch_speak": "I couldn't reach you. Alerting your emergency contacts now. Please stay calm.",
+    "dispatch_sms": "EMERGENCY: {{name}} has fallen at {{time}}. Location: {{link}} Please respond immediately.",
+    "dispatch_notification_title": "EMERGENCY: Fall Detected",
+    "dispatch_notification_body": "{{name}} has fallen at {{time}}. Location: {{link}}",
+    "bg_notification_title": "Possible Fall Detected",
+    "bg_notification_body": "I detected a possible fall at {{time}}. Are you okay? Open the app to cancel the alert.",
+    "cancel_speak": "Glad you're okay. I'll keep monitoring."
   }
 }

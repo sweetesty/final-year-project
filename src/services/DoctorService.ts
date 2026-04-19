@@ -248,13 +248,14 @@ export class DoctorService {
       .in('id', patientIds);
 
     if (profileError) {
-      console.error('[DoctorService] Profile fetch error (RLS Check?):', profileError);
-      return [];
+      console.error('[DoctorService] Profile fetch error (Check RLS on "profiles" table?):', profileError);
+      throw new Error(`Failed to read patient profiles: ${profileError.message}`);
     }
 
     console.log(`[DoctorService] Successfully fetched ${profiles?.length || 0} profiles for ${patientIds.length} links.`);
-    if (profiles?.length < patientIds.length) {
-      console.warn('[DoctorService] MISMATCH: Some linked patients were not found in the profiles table. This is almost certainly an RLS policy issue.');
+    
+    if (patientIds.length > 0 && (!profiles || profiles.length === 0)) {
+       console.warn('[DoctorService] SECURITY ALERT: Found linked patient IDs but profiles are empty. This usually means the "profiles" table RLS policy is blocking doctors from reading patient data.');
     }
 
     return profiles || [];

@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useRootNavigationState } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown, SlideInRight, SlideInLeft, FadeIn } from 'react-native-reanimated';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAiAssistantViewModel, Message } from '@/src/viewmodels/useAiAssistantViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';

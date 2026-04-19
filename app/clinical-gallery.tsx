@@ -6,7 +6,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ChatService } from '@/src/services/ChatService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';

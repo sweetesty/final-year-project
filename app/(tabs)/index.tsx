@@ -27,7 +27,7 @@ import Animated, {
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SpeechService } from '@/src/services/SpeechService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -43,6 +43,7 @@ import { useSymptomViewModel } from '@/src/viewmodels/useSymptomViewModel';
 import { useVitalsViewModel } from '@/src/viewmodels/useVitalsViewModel';
 import { VitalsTrendChart } from '@/src/components/AnalyticsCharts';
 import { supabase } from '@/src/services/SupabaseService';
+import { OpenAiService } from '@/src/services/OpenAiService';
 
 const { width } = Dimensions.get('window');
 
@@ -284,39 +285,63 @@ export default function HomeScreen() {
   }, [patientid, firstName, i18n.language]);
 
   const handleLogSymptom = async (type: string) => {
+    // Close first for instant feedback
+    setSymptomModalVisible(false);
+    
     try {
       if (patientid) {
-        await logSymptom(type, 'Logged via Home quick-log modal', 'moderate');
-        // Optional: show a confirmation
-        Alert.alert('Status Sent', 'Your doctor has been notified of how you are feeling.');
+        // Log in background
+        logSymptom(type, 'Logged via Home quick-log modal', 'moderate')
+          .catch(err => console.error('[Symptom] Background log failed:', err));
+        
+        // Use a short delay for the alert so it doesn't interrupt the transition
+        setTimeout(() => {
+          Alert.alert('Status Sent', 'Your doctor has been notified of how you are feeling.');
+        }, 400);
       }
-      setSymptomModalVisible(false);
     } catch (e) {
-      console.error('[Symptom] Failed to notify doctor:', e);
-      Alert.alert('Error', 'Failed to send symptom report. Please try again.');
-      setSymptomModalVisible(false);
+      console.error('[Symptom] Failed to initiate log:', e);
     }
   };
 
   const zone = hrZone(vitals.heartrate);
 
-  const startAudioBriefing = () => {
-    const lng = i18n.language;
+  const startAudioBriefing = async () => {
+    const lng = (i18n.language || 'en').toLowerCase();
+    console.log('[Home] Audio Briefing Triggered. Language detected:', lng);
     
-    // 1. Localized Vitals & Status
-    const hrText = t('common.hr_is', { hr: vitals.heartrate });
-    const statusText = t('common.status_is', { status: zone.label });
-    const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
-    
-    // 2. Localized Medication Info
-    const nextMed = medications.length > 0 ? medications[0] : null;
-    const medText = nextMed 
-      ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
-      : t('common.no_more_meds');
-
-    // 3. Construct Narrative
-    const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
-    SpeechService.speak(fullText, lng);
+    if (lng.startsWith('en')) {
+      console.log('[Home] Identified as English. Calling Groq Narrative...');
+      try {
+        const healthContext = {
+          vitals: vitals,
+          medications: medications.map(m => ({ name: m.name, times: m.times }))
+        };
+        const narrative = await OpenAiService.generateClinicalNarrative(healthContext);
+        SpeechService.speak(narrative, 'en');
+      } catch (e) {
+        // Fallback to template if Groq fails
+        const hrText = t('common.hr_is', { hr: vitals.heartrate });
+        const statusText = t('common.status_is', { status: zone.label });
+        const medText = medications.length > 0 ? t('common.next_med_at', { name: medications[0].name, time: medications[0].times[0] }) : t('common.no_more_meds');
+        SpeechService.speak(`${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${medText}`, 'en');
+      }
+    } else {
+      // 1. Localized Vitals & Status
+      const hrText = t('common.hr_is', { hr: vitals.heartrate });
+      const statusText = t('common.status_is', { status: zone.label });
+      const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
+      
+      // 2. Localized Medication Info
+      const nextMed = medications.length > 0 ? medications[0] : null;
+      const medText = nextMed 
+        ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
+        : t('common.no_more_meds');
+      
+      // 3. Construct Narrative
+      const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
+      SpeechService.speak(fullText, lng);
+    }
   };
 
   // Prevent UI flicker for non-patients before redirect
@@ -585,9 +610,9 @@ export default function HomeScreen() {
       <Modal visible={historyVisible} animationType="fade" transparent onRequestClose={() => setHistoryVisible(false)}>
         <View style={styles.modalBackdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setHistoryVisible(false)} />
-          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
+          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: '#1E293B' }]}>
             <View style={styles.historyHeader}>
-              <Text style={[styles.historyTitle, { color: C.text }]}>{t('home.step_history')}</Text>
+              <Text style={[styles.historyTitle, { color: '#F8FAFC' }]}>{t('home.step_history')}</Text>
               <TouchableOpacity onPress={() => setHistoryVisible(false)} style={styles.historyClose}>
                 <MaterialIcons name="close" size={24} color={C.muted} />
               </TouchableOpacity>
@@ -611,9 +636,9 @@ export default function HomeScreen() {
                     yAxisLabel=""
                     yAxisSuffix=""
                     chartConfig={{
-                      backgroundColor: isDark ? '#0F172A' : '#fff',
-                      backgroundGradientFrom: isDark ? '#0F172A' : '#fff',
-                      backgroundGradientTo: isDark ? '#0F172A' : '#fff',
+                      backgroundColor: '#1E293B',
+                      backgroundGradientFrom: '#1E293B',
+                      backgroundGradientTo: '#1E293B',
                       decimalPlaces: 0,
                       color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
                       labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity * 0.5})` : `rgba(0, 0, 0, ${opacity * 0.5})`,
@@ -646,9 +671,9 @@ export default function HomeScreen() {
       <Modal visible={langModalVisible} animationType="slide" transparent onRequestClose={() => setLangModalVisible(false)}>
         <View style={styles.modalBackdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setLangModalVisible(false)} />
-          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
+          <Animated.View entering={FadeInDown.duration(300)} style={[styles.historySheet, { backgroundColor: '#1E293B' }]}>
             <View style={styles.historyHeader}>
-              <Text style={[styles.historyTitle, { color: C.text }]}>{t('common.language')}</Text>
+              <Text style={[styles.historyTitle, { color: '#F8FAFC' }]}>{t('common.language')}</Text>
               <TouchableOpacity onPress={() => setLangModalVisible(false)} style={styles.historyClose}>
                 <MaterialIcons name="close" size={24} color={C.muted} />
               </TouchableOpacity>
@@ -656,6 +681,7 @@ export default function HomeScreen() {
             <View style={{ gap: 12 }}>
               {[
                 { id: 'en', name: 'English', flag: '🇬🇧' },
+                { id: 'pcm', name: 'Pidgin', flag: '🇳🇬' },
                 { id: 'yo', name: 'Yorùbá', flag: '🇳🇬' },
                 { id: 'ig', name: 'Igbo', flag: '🇳🇬' },
                 { id: 'ha', name: 'Hausa', flag: '🇳🇬' },
@@ -672,7 +698,7 @@ export default function HomeScreen() {
                     setLangModalVisible(false);
                   }}
                 >
-                  <Text style={[styles.historyLabel, { color: C.text }]}>{lang.flag}  {lang.name}</Text>
+                  <Text style={[styles.historyLabel, { color: '#F1F5F9' }]}>{lang.flag}  {lang.name}</Text>
                   {i18n.language === lang.id && <MaterialIcons name="check" size={20} color={C.tint} />}
                 </TouchableOpacity>
               ))}

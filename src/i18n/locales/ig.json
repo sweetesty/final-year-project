@@ -73,7 +73,7 @@
     "skip_now": "Wefuo ugbu a"
   },
   "med": {
-    "schedule": "Usoro ọgwụ",
+    "schedule": "Ọgwụ Ụbọchị",
     "name": "Aha ọgwụ",
     "dosage": "Ogo ọgwụ",
     "critical": "Dị mkpa",
@@ -173,6 +173,18 @@
     "total": "Ngụkọta",
     "checkout": "Kwụọ Ụgwọ",
     "in_stock": "Dị N'ọnọdụ",
-    "out_of_stock": "Adịghị N'ọnọdụ"
+    "out_of_stock": "Adịghì N'ọnọdụ"
+  },
+  "fall": {
+    "triage_1": "{{name}}, anyị hụrụ na ị dara ada. Ị nọ mma? Ọ bụrụ na ịchọrọ enyemaka, nọrọ jụụ. M ga-agwa ndị ezinụlọ gị n'ime sekọnd iri abụọ. Pịa 'fagilé' ma ọ bụrụ na ị nọ mma.",
+    "triage_2": "{{name}}, ọ dị ka ị dara ada. Atụla egwu, Anọ m ebe a. Pịa bọtịnụ 'fagilé' ma ọ bụrụ na ị nọ mma, ma ọ bụghị ya m ga-akpọ maka enyemaka ugbu a.",
+    "triage_3": "{{name}}, ị nọ mma? Anyị hụrụ mgbe ị dara. Nọrọ jụụ — M na-enye gị sekọnd iri abụọ iji gwa m na ị nọ mma tupu m agwa ndị ezinụlọ gị na enwere nsogbu.",
+    "dispatch_speak": "Enweghị m ike iru gị. Ana m agwa ndị ezinụlọ gị ugbu a. Biko wetuo obi.",
+    "dispatch_sms": "NSOGBU: {{name}} dara ada na oge {{time}}. Ebe ọ nọ: {{link}} Biko zaghachi ugbu a.",
+    "dispatch_notification_title": "NSOGBU: Ịda Ada",
+    "dispatch_notification_body": "{{name}} dara ada na oge {{time}}. Ebe ọ nọ: {{link}}",
+    "bg_notification_title": "Ọ dị ka mmadụ dara ada",
+    "bg_notification_body": "Ahụrụ m na ọ dị ka ị dara ada na oge {{time}}. Ị nọ mma? Meghee ngwa a iji kwụsị ịdọ aka ná ntị a.",
+    "cancel_speak": "Obi dị m ụtọ na ị nọ mma. M ga-anọgide na-elekọta gị."
   }
 }

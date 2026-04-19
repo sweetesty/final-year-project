@@ -136,6 +136,10 @@ export default function RootLayout() {
         <Stack.Screen name="doctor-public-profile" options={{ headerShown: false }} />
         <Stack.Screen name="connection-requests" options={{ headerShown: false }} />
         <Stack.Screen name="my-requests" options={{ headerShown: false }} />
+        <Stack.Screen name="emergency-case" options={{ headerShown: false }} />
+        <Stack.Screen name="clinical-gallery" options={{ title: t('nav.clinical_gallery') }} />
+        <Stack.Screen name="professional-details" options={{ title: 'Professional Details' }} />
+        <Stack.Screen name="change-password" options={{ title: 'Security' }} />
       </Stack>
       <StatusBar style="auto" />
       <IncomingCallOverlay userId={session?.user?.id} />

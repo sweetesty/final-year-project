@@ -73,7 +73,7 @@
     "skip_now": "Tsallake yanzu"
   },
   "med": {
-    "schedule": "Tsarin magani",
+    "schedule": "Maganin Yau",
     "name": "Sunan maganin",
     "dosage": "Yawan magani",
     "critical": "Mai mahimmanci",
@@ -174,5 +174,17 @@
     "checkout": "Biya",
     "in_stock": "Akwai",
     "out_of_stock": "Babu"
+  },
+  "fall": {
+    "triage_1": "{{name}}, na ga ka fadi. Kana lafiya? Idan kana bukatar taimako, kar ka motsa. Zan sanar da mutanenka nan da sakonni ashirin. Taba 'soke' idan kana lafiya.",
+    "triage_2": "Sannu {{name}}, ga alama ka fadi. Kada ka damu, ina nan. Taba babbun 'soke' idan kana lafiya, in ba haka ba zan kira taimako nan ba dadewa ba.",
+    "triage_3": "{{name}}, kana lafiya? Na ga ka fadi. Kwantar da hankalinka — ina ba ka sakonni ashirin ka sanar da ni kana lafiya kafin in sanar da mutanenka na gaggawa.",
+    "dispatch_speak": "Ban samu kiran ka ba. Ina sanar da mutanenka na gaggawa yanzu. Don Allah kwantar da hankali.",
+    "dispatch_sms": "GAGGAWA: {{name}} ya fadi a lokacin {{time}}. Wuri: {{link}} Don Allah a amsa yanzu.",
+    "dispatch_notification_title": "GAGGAWA: An Samu Faduwa",
+    "dispatch_notification_body": "{{name}} ya fadi a lokacin {{time}}. Wuri: {{link}}",
+    "bg_notification_title": "Zan Iya Fadi",
+    "bg_notification_body": "Na ga alamar faduwa a lokacin {{time}}. Kana lafiya? Bude manhajar don soke wannan sanarwar.",
+    "cancel_speak": "Na ji dadin cewa kana lafiya. Zan ci gaba da kula da kai."
   }
 }

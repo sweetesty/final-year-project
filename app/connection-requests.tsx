@@ -7,8 +7,9 @@ import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
-import { Colors, Shadows, Spacing } from '@/constants/theme';
+import { Colors, Shadows, Spacing } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/src/services/SupabaseService';
 import { DoctorService, DoctorRequest } from '@/src/services/DoctorService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   typeText: { fontSize: 12, color: '#6366F1', fontWeight: '600' },
   timeText: { fontSize: 10, color: '#94A3B8', fontWeight: '500' },
-  messageBox: { padding: 12, borderRadius: 14, borderStyle: 'italic' },
+  messageBox: { padding: 12, borderRadius: 14, backgroundColor: 'rgba(148,163,184,0.1)' },
   messageText: { fontSize: 13, lineHeight: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   btnSecondary: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },

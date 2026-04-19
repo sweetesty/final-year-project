@@ -7,7 +7,7 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { Colors, Shadows, Spacing } from '@/constants/theme';
+import { Colors, Shadows, Spacing } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { DoctorService } from '@/src/services/DoctorService';
@@ -156,7 +156,7 @@ export default function DoctorPublicProfile() {
               <Text style={[styles.statVal, { color: isDark ? '#F1F5F9' : '#1E293B' }]}>Senior</Text>
             </View>
             <View style={[styles.statItem, { backgroundColor: isDark ? '#1E293B' : '#fff' }]}>
-              <MaterialIcons name="clinical-notes" size={22} color="#10B981" />
+              <MaterialIcons name="assignment-ind" size={22} color="#10B981" />
               <Text style={[styles.statLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Identity</Text>
               <Text style={[styles.statVal, { color: isDark ? '#F1F5F9' : '#1E293B' }]}>{profile?.medical_id || 'ID Verified'}</Text>
             </View>

@@ -5,14 +5,14 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useFocusEffect, Stack, useRouter, useRootNavigationState } from 'expo-router';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SpeechService } from '@/src/services/SpeechService';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 
 export default function MedicationDashboard() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -118,8 +118,8 @@ export default function MedicationDashboard() {
       ...med,
       scheduledTime: time,
       status: todayLogs.find(l => 
-        (l.medicationid === med.id || l.medicationId === med.id) && 
-        (l.scheduledtime === time || l.scheduledTime === time)
+        l.medicationId === med.id && 
+        l.scheduledTime === time
       )?.status || 'pending',
     }))
   ).sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
@@ -166,7 +166,11 @@ export default function MedicationDashboard() {
               </View>
             ) : (
               todaySchedule.map((item, index) => (
-                <Animated.View key={`${item.id}-${index}`} entering={FadeInDown.delay(index * 60).duration(350)}>
+                <Animated.View 
+                  key={`${item.id}-${index}`} 
+                  entering={FadeInDown.delay(index * 60).duration(350)}
+                  layout={Layout.springify().damping(15)}
+                >
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => openDetails(item)}
@@ -222,7 +226,7 @@ export default function MedicationDashboard() {
                       </Text>
                       {item.prescribedBy && (
                         <Text style={[styles.prescribedByText, { color: themeColors.muted }]}>
-                          Prescribed by Dr. {item.prescribedBy}
+                          Prescribed by Dr. {item.prescribedBy.replace(/^(Doctor|Dr\.?)\s+/i, '').trim()}
                         </Text>
                       )}
                       {item.durationDays && item.endDate && (
@@ -280,7 +284,7 @@ export default function MedicationDashboard() {
       <Modal animationType="slide" transparent visible={detailVisible} onRequestClose={() => setDetailVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setDetailVisible(false)} />
-          <View style={[styles.modalContent, { backgroundColor: themeColors.card }]}>
+          <View style={[styles.modalContent, { backgroundColor: '#1E293B' }]}>
             <View style={styles.modalHeaderClose}>
               <View style={[styles.iconBox, { backgroundColor: themeColors.tint + '15' }]}>
                 <MaterialIcons name="medication" size={32} color={themeColors.tint} />
@@ -308,8 +312,8 @@ export default function MedicationDashboard() {
 
             {selectedMed && (
               <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={[styles.modalTitle, { color: themeColors.text }]}>{selectedMed.name}</Text>
-                <Text style={[styles.modalSubtitle, { color: themeColors.tint }]}>{selectedMed.dosage}</Text>
+                <Text style={[styles.modalTitle, { color: '#F8FAFC' }]}>{selectedMed.name}</Text>
+                <Text style={[styles.modalSubtitle, { color: '#93C5FD' }]}>{selectedMed.dosage}</Text>
 
                 <View style={[styles.infoSection, { borderColor: themeColors.border }]}>
                   <Text style={[styles.sectionLabel, { color: themeColors.muted }]}>INSTRUCTIONS & NOTES</Text>
@@ -320,8 +324,8 @@ export default function MedicationDashboard() {
 
                 <View style={styles.detailGrid}>
                   <View style={styles.detailItem}>
-                    <Text style={[styles.sectionLabel, { color: themeColors.muted }]}>SCHEDULED TIME</Text>
-                    <Text style={[styles.detailValue, { color: themeColors.text }]}>{selectedMed.scheduledTime}</Text>
+                    <Text style={[styles.sectionLabel, { color: '#94A3B8' }]}>SCHEDULED TIME</Text>
+                    <Text style={[styles.detailValue, { color: '#F8FAFC' }]}>{selectedMed.scheduledTime}</Text>
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={[styles.sectionLabel, { color: themeColors.muted }]}>STATUS</Text>

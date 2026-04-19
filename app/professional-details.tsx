@@ -7,7 +7,7 @@ import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, Shadows, BorderRadius } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';

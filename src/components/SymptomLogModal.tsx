@@ -11,7 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Shadows } from '@/constants/theme';
+import { Shadows } from '@/src/constants/theme';
 import { useTranslation } from 'react-i18next';
 import { SpeechService } from '../services/SpeechService';
 
@@ -67,7 +67,7 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
 
           {/* ── Header gradient ─────────────────────────────────── */}
           <LinearGradient
-            colors={['#1D4ED8', '#2563EB']}
+            colors={['#1E1B4B', '#312E81']}
             style={styles.header}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -80,16 +80,16 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
             </View>
 
             <View style={styles.headerIcon}>
-              <MaterialIcons name="health-and-safety" size={28} color="#fff" />
+              <MaterialIcons name="health-and-safety" size={28} color="#818CF8" />
             </View>
             <Text style={styles.headerTitle}>{t('home.daily_checkin')}</Text>
             <Text style={styles.headerSub}>{t('common.how_are_you')}</Text>
           </LinearGradient>
 
           {/* ── Body ────────────────────────────────────────────── */}
-          <View style={[styles.body, { backgroundColor: isDark ? '#0F172A' : '#fff' }]}>
+          <View style={[styles.body, { backgroundColor: '#080C18' }]}>
 
-            <Text style={[styles.sectionLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+            <Text style={[styles.sectionLabel, { color: '#64748B' }]}>
               {t('home.experiencing')}
             </Text>
 
@@ -100,7 +100,7 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
                   <TouchableOpacity
                     style={[
                       styles.symptomCard,
-                      { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F8FAFC' },
+                      { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 },
                     ]}
                     onPress={() => handleSelect(s.id)}
                     activeOpacity={0.75}
@@ -108,7 +108,7 @@ export const SymptomLogModal = ({ visible, onClose, onLog, theme, userName }: Sy
                     <View style={[styles.symptomIcon, { backgroundColor: s.color + '20' }]}>
                       <MaterialIcons name={s.icon as any} size={22} color={s.color} />
                     </View>
-                    <Text style={[styles.symptomLabel, { color: isDark ? '#F1F5F9' : '#1E293B' }]}>
+                    <Text style={[styles.symptomLabel, { color: '#F8FAFC' }]}>
                       {s.label}
                     </Text>
                   </TouchableOpacity>

@@ -73,7 +73,7 @@
     "skip_now": "Fò kọjá báyìí"
   },
   "med": {
-    "schedule": "Àfikún Oògùn",
+    "schedule": "Oògùn Òjọ́",
     "name": "Orúkọ Oògùn",
     "dosage": "Mímú Oògùn",
     "critical": "Pàjáwìrì",
@@ -174,5 +174,17 @@
     "checkout": "Sanwó",
     "in_stock": "Wà Ní Ọjà",
     "out_of_stock": "Ko Wà Ní Ọjà"
+  },
+  "fall": {
+    "triage_1": "{{name}}, mo rí ìṣubú rẹ. Ṣé o wà dáadáa? Tí o bá fẹ́ ìrànlọ́wọ́, dákẹ́ jẹ́. Màá sọ fún àwọn èèyàn rẹ ní ìṣẹ́jú 20. Tẹ̀ ẹ́ ní fagilé tí o bá wà dáadáa.",
+    "triage_2": "{{name}}, ó dàbí pé o ṣubú. Má bèrù, mo wà níbí. Tẹ̀ ẹ́ ní fagilé tí o bá wà dáadáa, bí bẹ́ẹ̀ kọ́ màá pe ìrànlọ́wọ́ láìpẹ́.",
+    "triage_3": "{{name}}, ṣé o wà dáadáa? Mo rí fégere ìṣubú. Dákẹ́ jẹ́ — mo fún ọ ní ìṣẹ́jú 20 láti sọ fún mi pé o wà dáadáa kí n tó sọ fún àwọn èèyàn rẹ.",
+    "dispatch_speak": "Mi ò rí ohùn rẹ mọ́. Mo ń sọ fún àwọn èèyàn rẹ báyìí. Ẹ jọ̀wọ́ sinmi.",
+    "dispatch_sms": "ÌRÀNGBÀ: {{name}} ṣubú ní agogo {{time}}. Ibẹ̀: {{link}}. Ẹ jọ̀wọ́ fèsì kánkán.",
+    "dispatch_notification_title": "ÌRÀNGBÀ: Ìṣubú Rí",
+    "dispatch_notification_body": "{{name}} ṣubú ní agogo {{time}}. Ibẹ̀: {{link}}",
+    "bg_notification_title": "Ìṣubú Rí Báyìí",
+    "bg_notification_body": "Mo rí ìṣubú rẹ ní agogo {{time}}. Ṣé o wà dáadáa? Ṣí ohun èlò yìí láti fagilé ìkilọ̀ náà.",
+    "cancel_speak": "Inú mi dùn pé o wà dáadáa. Màá máa ṣọ́ ọ lọ."
   }
 }

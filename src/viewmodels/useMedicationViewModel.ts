@@ -199,15 +199,36 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
       Alert.alert('Error', 'Patient context not ready.');
       return;
     }
+    const now = new Date().toISOString();
+    // ── Optimistic UI Update ──
+    const optimisticLog: MedicationLog = {
+      id: Math.random().toString(36).substring(7), // temporary id
+      medicationId,
+      patientId,
+      status,
+      scheduledTime,
+      takenAt: now,
+    };
+    
+    setTodayLogs(prev => [...prev.filter(l => !(l.medicationId === medicationId && l.scheduledTime === scheduledTime)), optimisticLog]);
+
     try {
-      await OfflineSyncService.write('medication_logs', 'insert', {
+      // Perform write in background
+      OfflineSyncService.write('medication_logs', 'insert', {
         medicationid: medicationId,
         patientid: patientId,
         status,
         scheduledtime: scheduledTime,
-        takenat: new Date().toISOString(),
+        takenat: now,
+      }).catch(err => {
+        console.error('[MedicationViewModel] Sync failed:', err);
+        // On failure, we might want to revert or just let the offline service retry
+        // For now, we rely on the persistent offline queue.
       });
-      await fetchTodayLogs();
+
+      // We don't await fetchTodayLogs() here anymore to keep UI responsive.
+      // fetchTodayLogs(); 
+
 
       if (status === 'skipped') {
         const med = medications.find(m => m.id === medicationId);
@@ -359,6 +380,14 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
         fetchTodayLogs();
       }) // End of log watch
       .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'medications',
+        filter: `patientid=eq.${patientId}`,
+      }, () => {
+        fetchMedications();
+      })
+      .on('postgres_changes', {
         event: 'DELETE',
         schema: 'public',
         table: 'medications',
@@ -366,7 +395,16 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
       }, () => {
         fetchMedications();
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) {
+          console.error(`[MedicationViewModel] Real-time error for ${patientId}:`, err);
+        } else if (status === 'SUBSCRIBED') {
+          console.log(`[MedicationViewModel] Real-time active for ${patientId}`);
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          console.warn(`[MedicationViewModel] channel ${status} for ${patientId}, retrying...`);
+          setTimeout(() => fetchMedications(true), 1000);
+        }
+      });
 
     return () => { supabase.removeChannel(subscription); };
   }, [patientId, fetchMedications]);

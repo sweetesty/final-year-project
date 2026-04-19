@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
   ActivityIndicator, Dimensions, Alert, Linking, ScrollView, Vibration, Share,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+const LiveTrackingMap = lazy(() => import('@/src/components/maps/LiveTrackingMap'));
+import { Colors, Spacing, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -42,7 +42,7 @@ export default function LiveTrackingScreen() {
   const patientName = (params.patientName as string) || session?.user?.user_metadata?.full_name || 'Patient';
   const isSelf = patientId === session?.user?.id;
 
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
   const [safeZoneCenter, setSafeZoneCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -275,46 +275,20 @@ export default function LiveTrackingScreen() {
       <Stack.Screen options={{ title: isSelf ? 'Safety & SOS' : `${patientName}'s Location`, headerShown: true }} />
 
       {/* Map */}
-      {location ? (
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_DEFAULT}
-          style={styles.map}
-          initialRegion={{ ...location, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-          showsUserLocation={isSelf}
-          showsMyLocationButton={false}
-        >
-          {/* Safe zone circle */}
-          {safeZoneCenter && (
-            <>
-              <Circle
-                center={safeZoneCenter}
-                radius={SAFE_ZONE_RADIUS}
-                strokeColor="rgba(99,102,241,0.6)"
-                fillColor="rgba(99,102,241,0.08)"
-                strokeWidth={2}
-              />
-              <Marker coordinate={safeZoneCenter} title="Safe Zone" anchor={{ x: 0.5, y: 0.5 }}>
-                <View style={styles.homeMarker}>
-                  <MaterialIcons name="home" size={18} color="#6366F1" />
-                </View>
-              </Marker>
-            </>
-          )}
-
-          {/* Patient marker */}
-          <Marker coordinate={location} title={patientName} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={[styles.markerOuter, { borderColor: sosActive ? '#EF4444' : themeColors.tint }]}>
-              <View style={[styles.markerInner, { backgroundColor: sosActive ? '#EF4444' : themeColors.tint }]} />
-            </View>
-          </Marker>
-        </MapView>
-      ) : (
-        <View style={[styles.centered, styles.map, { backgroundColor: themeColors.background }]}>
-          <MaterialIcons name="location-off" size={48} color={themeColors.muted} />
-          <Text style={{ color: themeColors.muted, marginTop: 12 }}>Location unavailable</Text>
-        </View>
-      )}
+      <View style={styles.map}>
+        <Suspense fallback={<View style={[styles.mapPlaceholder, { backgroundColor: themeColors.background }]}><ActivityIndicator size="small" color={themeColors.tint} /></View>}>
+          <LiveTrackingMap
+            ref={mapRef}
+            location={location}
+            safeZoneCenter={safeZoneCenter}
+            SAFE_ZONE_RADIUS={SAFE_ZONE_RADIUS}
+            patientName={patientName}
+            isSelf={isSelf}
+            sosActive={sosActive}
+            themeColors={themeColors}
+          />
+        </Suspense>
+      </View>
 
       {/* Safe zone status bar */}
       {safeZoneStatus !== null && (
@@ -454,6 +428,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   map: { width, height: height * 0.42 },
+  mapPlaceholder: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
 
   safeZoneBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

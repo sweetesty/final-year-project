@@ -7,7 +7,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { SlideInRight, SlideInLeft, FadeIn } from 'react-native-reanimated';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ChatService, DirectMessage } from '@/src/services/ChatService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';

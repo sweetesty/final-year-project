@@ -4,6 +4,7 @@ import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { supabase } from './SupabaseService';
 import { SmsService } from './SmsService';
+import i18n from '../i18n';
 
 const BACKGROUND_FALL_TASK = 'BACKGROUND_FALL_DETECTION';
 
@@ -50,11 +51,11 @@ if (!isExpoGo) {
         const patientId = session.user.id;
         const patientName = session.user.user_metadata?.full_name ?? 'Patient';
 
-        const timestamp = new Date().toLocaleString();
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: 'Possible Fall Detected',
-            body: `I detected a possible fall at ${timestamp}. Are you okay? Open the app to cancel the alert.`,
+            title: i18n.t('fall.bg_notification_title'),
+            body: i18n.t('fall.bg_notification_body', { time: timestamp }),
             data: { type: 'fall_warning' },
             sound: 'default',
           },
@@ -85,10 +86,10 @@ if (!isExpoGo) {
           .single();
 
         if (contact) {
-          const timestamp = new Date().toLocaleString();
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           await SmsService.sendEmergencySms(
             contact.phone,
-            `ALERT: ${patientName} may have fallen at ${timestamp} (background detection). Location: ${mapsLink}`
+            i18n.t('fall.dispatch_sms', { name: patientName, time: timeStr, link: mapsLink, lng: 'en' })
           );
         }
 

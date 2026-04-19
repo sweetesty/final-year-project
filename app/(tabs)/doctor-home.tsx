@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl, Dimensions, Alert, Linking, Platform,
@@ -7,7 +8,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows } from '@/src/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { supabase } from '@/src/services/SupabaseService';
@@ -117,14 +118,33 @@ export default function DoctorHomeScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [session, refreshAlertsOnly]);
 
-  useEffect(() => { load(); }, [load]);
+  // Ensure dashboard is fresh whenever it comes back into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[DoctorHome] Dashboard focused - triggering refresh');
+      load();
+    }, [load])
+  );
 
   const handleAcceptAlert = async (alertId: string, patientId: string, patientName: string) => {
     try {
+      console.log(`[DoctorHome] Accepting alert: ${alertId} for ${patientName}`);
+      
+      // 1. Navigate immediately to the emergency screen
+      router.push({ 
+        pathname: '/emergency-case', 
+        params: { patientId, patientName, alertId } 
+      });
+
+      // 2. Mark as accepted
       await DoctorService.acceptAlert(alertId, session!.user.id);
-      refreshAlertsOnly(); // Targeted refresh
-      router.push({ pathname: '/emergency-case', params: { patientId, patientName, alertId } });
-    } catch { Alert.alert('Error', 'Could not accept alert.'); }
+      
+      // 3. Refresh dashboard data after a delay
+      setTimeout(() => refreshAlertsOnly(), 800);
+    } catch (error) { 
+      console.error('[DoctorHome] Accept Alert Error:', error);
+      Alert.alert('Error', 'Could not accept alert. Please try again.'); 
+    }
   };
 
   return (

@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, Text, Dimensions } from 'react-native';
 import { LineChart, ProgressChart, BarChart } from 'react-native-chart-kit';
-import { Colors, Spacing, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius } from '@/src/constants/theme';
 
 const { width } = Dimensions.get('window');
 

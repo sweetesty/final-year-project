@@ -27,7 +27,7 @@ import Animated, {
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SpeechService } from '@/src/services/SpeechService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -108,6 +108,7 @@ export default function HomeScreen() {
   const { session, role } = useAuthViewModel();
   const { t, i18n } = useTranslation();
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [symptomModalVisible, setSymptomModalVisible] = useState(false);
   
   const patientid   = session?.user?.id ?? '';
@@ -184,6 +185,9 @@ export default function HomeScreen() {
       : withTiming(900, { duration: 300 });
   }, [fallState]);
   const alertStyle = useAnimatedStyle(() => ({ transform: [{ translateY: alertY.value }] }));
+
+  // Wake Render instance + seed disk cache into memory on mount
+  useEffect(() => { SpeechService.init(); }, []);
 
   // Patient code
   useEffect(() => {
@@ -300,23 +304,29 @@ export default function HomeScreen() {
 
   const zone = hrZone(vitals.heartrate);
 
-  const startAudioBriefing = () => {
+  const startAudioBriefing = async () => {
+    if (speaking) {
+      SpeechService.stop();
+      setSpeaking(false);
+      return;
+    }
+
     const lng = i18n.language;
-    
-    // 1. Localized Vitals & Status
     const hrText = t('common.hr_is', { hr: vitals.heartrate });
     const statusText = t('common.status_is', { status: zone.label });
     const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
-    
-    // 2. Localized Medication Info
     const nextMed = medications.length > 0 ? medications[0] : null;
-    const medText = nextMed 
+    const medText = nextMed
       ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
       : t('common.no_more_meds');
-
-    // 3. Construct Narrative
     const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
-    SpeechService.speak(fullText, lng);
+
+    setSpeaking(true);
+    try {
+      await SpeechService.speak(fullText, lng);
+    } finally {
+      setSpeaking(false);
+    }
   };
 
   // Prevent UI flicker for non-patients before redirect
@@ -371,7 +381,7 @@ export default function HomeScreen() {
             HEADER  — dark card with gradient, name, time, status
         ════════════════════════════════════════════════════════════════ */}
         <LinearGradient
-          colors={isDark ? ['#0F1729', '#1A2744'] : ['#1D4ED8', '#2563EB']}
+          colors={HeaderGradient}
           style={styles.headerCard}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         >
@@ -388,11 +398,14 @@ export default function HomeScreen() {
               <Text style={styles.headerName}>{firstName}</Text>
             </View>
             <View style={styles.headerRight}>
-              <TouchableOpacity 
-                style={[styles.audioBriefBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+              <TouchableOpacity
+                style={[styles.audioBriefBtn, { backgroundColor: speaking ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.2)' }]}
                 onPress={startAudioBriefing}
+                disabled={false}
               >
-                <MaterialIcons name="volume-up" size={20} color="#fff" />
+                {speaking
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <MaterialIcons name="volume-up" size={20} color="#fff" />}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.monitorBadge, { marginBottom: 8 }]}
@@ -655,10 +668,11 @@ export default function HomeScreen() {
             </View>
             <View style={{ gap: 12 }}>
               {[
-                { id: 'en', name: 'English', flag: '🇬🇧' },
-                { id: 'yo', name: 'Yorùbá', flag: '🇳🇬' },
-                { id: 'ig', name: 'Igbo', flag: '🇳🇬' },
-                { id: 'ha', name: 'Hausa', flag: '🇳🇬' },
+                { id: 'en',  name: 'English',       flag: '🇬🇧' },
+                { id: 'yo',  name: 'Yorùbá',         flag: '🇳🇬' },
+                { id: 'ig',  name: 'Igbo',            flag: '🇳🇬' },
+                { id: 'ha',  name: 'Hausa',           flag: '🇳🇬' },
+                { id: 'pcm', name: 'Nigerian Pidgin', flag: '🇳🇬' },
               ].map((lang) => (
                 <TouchableOpacity
                   key={lang.id}
@@ -668,7 +682,21 @@ export default function HomeScreen() {
                     i18n.language === lang.id && { backgroundColor: C.tint + '10' }
                   ]}
                   onPress={() => {
-                    i18n.changeLanguage(lang.id);
+                    // Wake Render immediately so it's ready by the time prefetch fires
+                    SpeechService.init();
+                    i18n.changeLanguage(lang.id).then(() => {
+                      // Translations are now applied in the new language — build text and prefetch
+                      const hrText = i18n.t('common.hr_is', { hr: vitals.heartrate, lng: lang.id });
+                      const statusText = i18n.t('common.status_is', { status: zone.label, lng: lang.id });
+                      const stepText = vitals.steps > 0 ? i18n.t('common.steps_today', { steps: vitals.steps, lng: lang.id }) : '';
+                      const nextMed = medications.length > 0 ? medications[0] : null;
+                      const medText = nextMed
+                        ? i18n.t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0], lng: lang.id })
+                        : i18n.t('common.no_more_meds', { lng: lang.id });
+                      const greet = i18n.t(hour() < 12 ? 'home.welcome' : hour() < 17 ? 'home.good_afternoon' : 'home.good_evening', { lng: lang.id });
+                      const fullText = `${greet}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
+                      SpeechService.prefetch(fullText, lang.id);
+                    });
                     setLangModalVisible(false);
                   }}
                 >

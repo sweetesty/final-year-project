@@ -1,12 +1,24 @@
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import { documentDirectory, getInfoAsync, makeDirectoryAsync, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
+import {
+  documentDirectory, getInfoAsync, makeDirectoryAsync,
+  writeAsStringAsync, readDirectoryAsync, EncodingType,
+} from 'expo-file-system/legacy';
 import { encode } from 'base64-arraybuffer';
 import i18n from '@/src/i18n';
 
 const TTS_BACKEND_URL = process.env.EXPO_PUBLIC_TTS_BACKEND_URL ?? '';
+const CACHE_DIR = documentDirectory + 'yarn_tts_cache/';
 
 let _sound: Audio.Sound | null = null;
+let _audioModeSet = false;
+let _initDone = false;
+
+// In-memory set of filenames confirmed to exist on disk — skips getInfoAsync on repeat calls
+const _memCache = new Set<string>();
+
+// In-flight fetch deduplication: key → Promise<string (uri)>
+const _inflight = new Map<string, Promise<string>>();
 
 function _getCacheKey(text: string, locale: string): string {
   const clean = text.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 30);
@@ -16,67 +28,72 @@ function _getCacheKey(text: string, locale: string): string {
   return `yarn_${locale}_${clean}_${hash}.mp3`;
 }
 
+// Run once: create cache dir + load existing filenames into _memCache
+async function _init() {
+  if (_initDone) return;
+  _initDone = true;
+  try {
+    const info = await getInfoAsync(CACHE_DIR);
+    if (!info.exists) {
+      await makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+    } else {
+      const files = await readDirectoryAsync(CACHE_DIR);
+      for (const f of files) _memCache.add(f);
+    }
+  } catch (_) {}
+}
+
+async function _ensureAudioMode() {
+  if (_audioModeSet) return;
+  await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+  _audioModeSet = true;
+}
+
 async function _stopCurrent() {
   if (_sound) {
-    try {
-      await _sound.stopAsync();
-      await _sound.unloadAsync();
-    } catch (_) {}
+    try { await _sound.stopAsync(); await _sound.unloadAsync(); } catch (_) {}
     _sound = null;
   }
 }
 
-async function _speakYarn(text: string, locale: string): Promise<boolean> {
-  if (!TTS_BACKEND_URL) return false;
+function _getAudioUri(text: string, locale: string): Promise<string> {
+  const key = _getCacheKey(text, locale);
+  const uri = CACHE_DIR + key;
 
-  try {
-    const cacheKey = _getCacheKey(text, locale);
-    const cacheDir = documentDirectory + 'yarn_tts_cache/';
-    const cacheUri = cacheDir + cacheKey;
+  // Memory cache hit — no async work needed
+  if (_memCache.has(key)) return Promise.resolve(uri);
 
-    const dirInfo = await getInfoAsync(cacheDir);
-    if (!dirInfo.exists) {
-      await makeDirectoryAsync(cacheDir, { intermediates: true });
-    }
+  // Reuse in-flight promise for identical requests
+  if (_inflight.has(key)) return _inflight.get(key)!;
 
-    const cacheInfo = await getInfoAsync(cacheUri);
-    if (!cacheInfo.exists) {
+  const promise = (async (): Promise<string> => {
+    try {
+      await _init();
+
+      // Re-check memory cache after init (another call may have populated it)
+      if (_memCache.has(key)) return uri;
+
       const response = await fetch(`${TTS_BACKEND_URL}/api/tts/speak`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, locale, format: 'mp3' }),
       });
 
-      if (!response.ok) {
-        console.warn('[SpeechService] YarnGPT backend error:', response.status);
-        return false;
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const arrayBuffer = await response.arrayBuffer();
-      const base64 = encode(arrayBuffer);
-      await writeAsStringAsync(cacheUri, base64, { encoding: EncodingType.Base64 });
+      const base64 = encode(await response.arrayBuffer());
+      await writeAsStringAsync(uri, base64, { encoding: EncodingType.Base64 });
+
+      // Register in memory cache so next call is instant
+      _memCache.add(key);
+      return uri;
+    } finally {
+      _inflight.delete(key);
     }
+  })();
 
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
-
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: cacheUri },
-      { shouldPlay: true, volume: 1.0 },
-    );
-    _sound = sound;
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
-        if (_sound === sound) _sound = null;
-      }
-    });
-
-    return true;
-  } catch (e) {
-    console.warn('[SpeechService] YarnGPT TTS failed, falling back to native:', e);
-    return false;
-  }
+  _inflight.set(key, promise);
+  return promise;
 }
 
 function _fallbackSpeak(text: string, lng?: string) {
@@ -85,24 +102,56 @@ function _fallbackSpeak(text: string, lng?: string) {
   if (clean.startsWith('yo')) languageCode = 'yo-NG';
   else if (clean.startsWith('ig')) languageCode = 'ig-NG';
   else if (clean.startsWith('ha')) languageCode = 'ha-NG';
+  else if (clean.startsWith('pcm')) languageCode = 'en-NG'; // Nigerian Pidgin → Nigerian English accent
   Speech.speak(text, { language: languageCode, rate: 0.88, pitch: 1.05, volume: 1.0 });
 }
 
 export class SpeechService {
+  /** Call once at app startup to seed memory cache and wake the Render instance. */
+  static async init() {
+    // Seed memory cache from disk in background
+    _init().catch(() => {});
+
+    // Ping the backend to wake Render's free-tier instance before user taps anything
+    if (TTS_BACKEND_URL) {
+      fetch(`${TTS_BACKEND_URL}/health`).catch(() => {});
+    }
+  }
+
   static async speak(text: string, lng?: string) {
     if (!text) return;
-    try {
-      await _stopCurrent();
-      Speech.stop();
 
-      const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';
-      const success = await _speakYarn(text, language);
-      if (success) return;
+    _stopCurrent();
+    Speech.stop();
 
+    const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';
+
+    if (!TTS_BACKEND_URL) {
       _fallbackSpeak(text, language);
+      return;
+    }
+
+    try {
+      const [uri] = await Promise.all([
+        _getAudioUri(text, language),
+        _ensureAudioMode(),
+      ]);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, volume: 1.0 },
+      );
+      _sound = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+          if (_sound === sound) _sound = null;
+        }
+      });
     } catch (e) {
-      console.warn('[SpeechService] speak() error:', e);
-      _fallbackSpeak(text, lng || i18n.language);
+      console.warn('[SpeechService] YarnGPT TTS failed, falling back to native:', e);
+      _fallbackSpeak(text, language);
     }
   }
 
@@ -113,5 +162,12 @@ export class SpeechService {
     } catch (e) {
       console.warn('[SpeechService] stop() failed:', e);
     }
+  }
+
+  /** Pre-fetch audio for a piece of text silently (e.g. when screen loads or language changes). */
+  static prefetch(text: string, lng?: string) {
+    if (!TTS_BACKEND_URL || !text) return;
+    const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';
+    _getAudioUri(text, language).catch(() => {});
   }
 }

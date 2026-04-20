@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import * as Location from 'expo-location';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
 import { DoctorService } from '@/src/services/DoctorService';
@@ -214,7 +214,7 @@ const SPECIALTIES = [
 
 // ─── Patient-facing Find Doctor screen ───────────────────────────────────────
 function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router, themeColors, isDark, t }: any) {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [nearbyDoctors, setNearbyDoctors] = useState<any[]>([]);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -993,11 +993,11 @@ export default function DoctorDashboard() {
 
   // ─── Patient List View (default) ────────────────────────────────────────────
   return (
-    <View style={styles.darkContainer}>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Premium Header */}
-      <LinearGradient colors={['#1E1B4B', '#312E81', '#4338CA']} style={styles.panelHeader}>
+      <LinearGradient colors={HeaderGradient} style={styles.panelHeader}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {[...Array(6)].map((_, i) => (
             <View key={i} style={[styles.panelGridLine, { top: i * 28 }]} />
@@ -1027,24 +1027,24 @@ export default function DoctorDashboard() {
       >
         {/* Link Another Patient Banner */}
         <TouchableOpacity
-          style={styles.linkBannerDark}
+          style={[styles.linkBannerDark, { backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', borderColor: isDark ? 'rgba(99,102,241,0.35)' : 'rgba(99,102,241,0.2)' }]}
           onPress={() => setShowLinkForm(!showLinkForm)}
           activeOpacity={0.8}
         >
           <View style={styles.linkBannerIcon}>
-            <MaterialIcons name="person-add" size={18} color="#818CF8" />
+            <MaterialIcons name="person-add" size={18} color={themeColors.tint} />
           </View>
-          <Text style={styles.linkBannerText}>Link Another Patient</Text>
-          <MaterialIcons name={showLinkForm ? 'expand-less' : 'expand-more'} size={20} color="#818CF8" />
+          <Text style={[styles.linkBannerText, { color: themeColors.tint }]}>Link Another Patient</Text>
+          <MaterialIcons name={showLinkForm ? 'expand-less' : 'expand-more'} size={20} color={themeColors.tint} />
         </TouchableOpacity>
 
         {showLinkForm && (
-          <View style={styles.linkFormDark}>
-            <Text style={styles.linkFormHint}>Enter the 6-digit code from the patient's home screen</Text>
+          <View style={[styles.linkFormDark, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <Text style={[styles.linkFormHint, { color: themeColors.muted }]}>Enter the 6-digit code from the patient's home screen</Text>
             <TextInput
-              style={styles.darkInput}
+              style={[styles.darkInput, { backgroundColor: themeColors.background, borderColor: themeColors.border, color: themeColors.text }]}
               placeholder="Enter Patient Code"
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholderTextColor={themeColors.muted}
               value={linkCode}
               onChangeText={setLinkCode}
               keyboardType="number-pad"
@@ -1070,23 +1070,23 @@ export default function DoctorDashboard() {
         {/* Patient List */}
         {linkedPatients.length === 0 ? (
           <View style={styles.darkEmptyContainer}>
-            <View style={styles.darkEmptyIcon}>
+            <View style={[styles.darkEmptyIcon, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)' }]}>
               <MaterialIcons name="people-outline" size={40} color="rgba(99,102,241,0.6)" />
             </View>
-            <Text style={styles.darkEmptyTitle}>No Linked Patients</Text>
-            <Text style={styles.darkEmptySubtitle}>
+            <Text style={[styles.darkEmptyTitle, { color: themeColors.text }]}>No Linked Patients</Text>
+            <Text style={[styles.darkEmptySubtitle, { color: themeColors.muted }]}>
               Tap "Link Another Patient" above to begin clinical monitoring.
             </Text>
           </View>
         ) : (
           <>
-            <Text style={styles.darkSectionLabel}>
+            <Text style={[styles.darkSectionLabel, { color: themeColors.muted }]}>
               YOUR PATIENTS ({linkedPatients.length})
             </Text>
             {linkedPatients.map((patient, index) => (
               <TouchableOpacity
                 key={patient.id}
-                style={styles.darkPatientCard}
+                style={[styles.darkPatientCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
                 onPress={() => { setSelectedPatient(patient); setHealthSummary(null); }}
                 activeOpacity={0.8}
               >
@@ -1094,14 +1094,14 @@ export default function DoctorDashboard() {
                   <Text style={styles.darkPatientAvatarText}>{patient.full_name.charAt(0)}</Text>
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.darkPatientName}>{patient.full_name}</Text>
+                  <Text style={[styles.darkPatientName, { color: themeColors.text }]}>{patient.full_name}</Text>
                   <View style={styles.darkPatientStatus}>
                     <View style={styles.darkStatusDot} />
-                    <Text style={styles.darkPatientSub}>Active monitoring</Text>
+                    <Text style={[styles.darkPatientSub, { color: themeColors.muted }]}>Active monitoring</Text>
                   </View>
                 </View>
-                <View style={styles.darkPatientArrow}>
-                  <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.4)" />
+                <View style={[styles.darkPatientArrow, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                  <MaterialIcons name="chevron-right" size={20} color={themeColors.muted} />
                 </View>
               </TouchableOpacity>
             ))}

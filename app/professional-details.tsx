@@ -7,7 +7,7 @@ import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, Shadows, BorderRadius, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -122,7 +122,7 @@ export default function ProfessionalDetailsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <LinearGradient
-        colors={['#1E1B4B', '#312E81', '#4F46E5']}
+        colors={HeaderGradient}
         style={styles.header}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >

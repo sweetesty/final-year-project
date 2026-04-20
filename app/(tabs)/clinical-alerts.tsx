@@ -10,6 +10,7 @@ import { supabase } from '@/src/services/SupabaseService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, HeaderGradient } from '@/constants/theme';
 import { DoctorService } from '@/src/services/DoctorService';
 import { CaregiverService } from '@/src/services/CaregiverService';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -57,8 +58,8 @@ export default function ClinicalAlertsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const isCaregiver = role === 'caregiver';
-  const accentColor = isCaregiver ? '#0369a1' : '#6366F1';
-  const gradientColors: [string, string] = isCaregiver ? ['#0c4a6e', '#0369a1'] : ['#1E1B4B', '#4338CA'];
+  const C = Colors[colorScheme as 'light' | 'dark'];
+  const accentColor = C.tint;
 
   const loadHistory = useCallback(async () => {
     if (!session?.user?.id || !role) return;
@@ -270,7 +271,7 @@ export default function ClinicalAlertsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header ── */}
-      <LinearGradient colors={gradientColors} style={styles.header}>
+      <LinearGradient colors={HeaderGradient} style={styles.header}>
         {/* decorative grid */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {[0,1,2,3,4].map(i => (

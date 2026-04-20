@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Linking, Alert, Dimensions, Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -51,7 +51,7 @@ export default function EmergencyCaseScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [doctorLocation, setDoctorLocation] = useState<{ latitude: number; longitude: number } | null>(null);

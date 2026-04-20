@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TouchableOpacity, ActivityIndicator,
   ScrollView, Alert, Platform,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -31,7 +31,7 @@ export default function NearbyDoctorsScreen() {
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
   const { session } = useAuthViewModel();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [doctors, setDoctors] = useState<NearbyDoctor[]>([]);
@@ -146,7 +146,6 @@ export default function NearbyDoctorsScreen() {
             : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
         }
       >
-        {/* 25km search radius */}
         {myLocation && (
           <Circle
             center={myLocation}
@@ -156,8 +155,6 @@ export default function NearbyDoctorsScreen() {
             strokeWidth={1.5}
           />
         )}
-
-        {/* Doctor markers */}
         {doctors.map(doc => (
           <Marker
             key={doc.id}

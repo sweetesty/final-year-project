@@ -120,7 +120,7 @@ export default function CaregiverDashboard() {
         <Stack.Screen options={{ headerShown: false }} />
 
         <LinearGradient
-          colors={isEmergency ? ['#7f1d1d', '#450a0a'] : ['#0c4a6e', '#0369a1']}
+          colors={isEmergency ? ['#7f1d1d', '#450a0a'] : ['#1E1B4B', '#312E81', '#4338CA']}
           style={styles.detailHeader}
         >
           <TouchableOpacity onPress={() => setSelectedPatient(null)} style={styles.backBtn}>
@@ -304,7 +304,7 @@ export default function CaregiverDashboard() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <LinearGradient
-        colors={isDark ? ['#1E1B4B', '#312E81', '#4338CA'] : ['#4338CA', '#6366F1', '#818CF8']}
+        colors={['#1E1B4B', '#312E81', '#4338CA']}
         style={styles.panelHeader}
       >
         <View style={styles.panelHeaderTop}>

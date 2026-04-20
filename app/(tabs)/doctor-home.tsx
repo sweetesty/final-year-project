@@ -7,7 +7,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { supabase } from '@/src/services/SupabaseService';
@@ -137,7 +137,7 @@ export default function DoctorHomeScreen() {
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <LinearGradient
-        colors={['#1E1B4B', '#312E81', '#4338CA']}
+        colors={HeaderGradient}
         style={styles.header}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >

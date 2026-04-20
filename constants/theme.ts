@@ -1,3 +1,6 @@
+// Single gradient used for all primary screen headers app-wide
+export const HeaderGradient: [string, string, string] = ['#1D4ED8', '#2563EB', '#3B82F6'];
+
 export const Colors = {
   light: {
     text: '#0F172A',

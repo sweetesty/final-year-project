@@ -27,7 +27,7 @@ import Animated, {
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Shadows, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SpeechService } from '@/src/services/SpeechService';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
@@ -381,7 +381,7 @@ export default function HomeScreen() {
             HEADER  — dark card with gradient, name, time, status
         ════════════════════════════════════════════════════════════════ */}
         <LinearGradient
-          colors={isDark ? ['#0F1729', '#1A2744'] : ['#1D4ED8', '#2563EB']}
+          colors={HeaderGradient}
           style={styles.headerCard}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         >

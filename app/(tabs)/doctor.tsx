@@ -4,7 +4,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import * as Location from 'expo-location';
-import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, BorderRadius, Shadows, HeaderGradient } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdherenceScoreChart, VitalsTrendChart, FallFrequencyChart, ActivityIntensityChart } from '@/src/components/AnalyticsCharts';
 import { DoctorService } from '@/src/services/DoctorService';
@@ -997,7 +997,7 @@ export default function DoctorDashboard() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Premium Header */}
-      <LinearGradient colors={['#1E1B4B', '#312E81', '#4338CA']} style={styles.panelHeader}>
+      <LinearGradient colors={HeaderGradient} style={styles.panelHeader}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {[...Array(6)].map((_, i) => (
             <View key={i} style={[styles.panelGridLine, { top: i * 28 }]} />

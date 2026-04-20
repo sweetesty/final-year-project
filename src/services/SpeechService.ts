@@ -161,17 +161,7 @@ export class SpeechService {
       Speech.stop();
 
       const language = lng?.toLowerCase() ?? i18n.language?.toLowerCase() ?? 'en';
-      
-      let success = false;
-      const isEnglish = language === 'en' || language.startsWith('en-');
-      
-      if (isEnglish) {
-        console.log('[SpeechService] Attempting ElevenLabs/Groq Voice for:', language);
-        success = await _speakElevenLabs(text);
-      } else {
-        console.log('[SpeechService] Attempting YarnGPT for:', language);
-        success = await _speakYarn(text, language);
-      }
+      const success = await _speakYarn(text, language);
 
       if (success) return;
 

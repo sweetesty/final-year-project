@@ -74,6 +74,7 @@ export class OfflineSyncService {
       normalizedPayload.spo2 = normalizedPayload.spo2Level;
       delete normalizedPayload.spo2Level;
     }
+    let query;
     if (operation === 'insert') {
       query = supabase.from(table).insert(normalizedPayload);
     } else {

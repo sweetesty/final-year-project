@@ -682,18 +682,22 @@ export default function HomeScreen() {
                     i18n.language === lang.id && { backgroundColor: C.tint + '10' }
                   ]}
                   onPress={() => {
-                    i18n.changeLanguage(lang.id);
+                    // Wake Render immediately so it's ready by the time prefetch fires
+                    SpeechService.init();
+                    i18n.changeLanguage(lang.id).then(() => {
+                      // Translations are now applied in the new language — build text and prefetch
+                      const hrText = i18n.t('common.hr_is', { hr: vitals.heartrate, lng: lang.id });
+                      const statusText = i18n.t('common.status_is', { status: zone.label, lng: lang.id });
+                      const stepText = vitals.steps > 0 ? i18n.t('common.steps_today', { steps: vitals.steps, lng: lang.id }) : '';
+                      const nextMed = medications.length > 0 ? medications[0] : null;
+                      const medText = nextMed
+                        ? i18n.t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0], lng: lang.id })
+                        : i18n.t('common.no_more_meds', { lng: lang.id });
+                      const greet = i18n.t(hour() < 12 ? 'home.welcome' : hour() < 17 ? 'home.good_afternoon' : 'home.good_evening', { lng: lang.id });
+                      const fullText = `${greet}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
+                      SpeechService.prefetch(fullText, lang.id);
+                    });
                     setLangModalVisible(false);
-                    // Pre-fetch the briefing audio in the new language so first tap is instant
-                    const hrText = t('common.hr_is', { hr: vitals.heartrate });
-                    const statusText = t('common.status_is', { status: zone.label });
-                    const stepText = vitals.steps > 0 ? t('common.steps_today', { steps: vitals.steps }) : '';
-                    const nextMed = medications.length > 0 ? medications[0] : null;
-                    const medText = nextMed
-                      ? t('common.next_med_at', { name: nextMed.name, time: nextMed.times[0] })
-                      : t('common.no_more_meds');
-                    const fullText = `${greeting(t)}, ${firstName}. ${hrText} ${statusText} ${stepText} ${medText}`;
-                    SpeechService.prefetch(fullText, lang.id);
                   }}
                 >
                   <Text style={[styles.historyLabel, { color: C.text }]}>{lang.flag}  {lang.name}</Text>

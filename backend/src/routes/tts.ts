@@ -7,10 +7,11 @@ const YARNGPT_URL = 'https://yarngpt.ai/api/v1/tts';
 
 // Maps i18n locale → best YarnGPT voice
 const LOCALE_VOICE: Record<string, string> = {
-  en: 'Idera',
-  yo: 'Wura',   // Yoruba
-  ha: 'Umar',   // Hausa
-  ig: 'Adaora', // Igbo
+  en:  'Idera',
+  yo:  'Wura',   // Yoruba
+  ha:  'Umar',   // Hausa
+  ig:  'Adaora', // Igbo
+  pcm: 'Osagie', // Nigerian Pidgin
 };
 
 export type YarnVoice =

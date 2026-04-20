@@ -102,6 +102,7 @@ function _fallbackSpeak(text: string, lng?: string) {
   if (clean.startsWith('yo')) languageCode = 'yo-NG';
   else if (clean.startsWith('ig')) languageCode = 'ig-NG';
   else if (clean.startsWith('ha')) languageCode = 'ha-NG';
+  else if (clean.startsWith('pcm')) languageCode = 'en-NG'; // Nigerian Pidgin → Nigerian English accent
   Speech.speak(text, { language: languageCode, rate: 0.88, pitch: 1.05, volume: 1.0 });
 }
 

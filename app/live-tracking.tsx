@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TouchableOpacity,
   ActivityIndicator, Dimensions, Alert, Linking, ScrollView, Vibration, Share,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT, MapPlaceholder, mapsAvailable } from '@/src/components/MapViewCompat';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -275,9 +275,7 @@ export default function LiveTrackingScreen() {
       <Stack.Screen options={{ title: isSelf ? 'Safety & SOS' : `${patientName}'s Location`, headerShown: true }} />
 
       {/* Map */}
-      {!mapsAvailable ? (
-        <View style={[styles.map]}><MapPlaceholder label="Map requires a dev build" /></View>
-      ) : location ? (
+      {location ? (
         <MapView
           ref={mapRef}
           provider={PROVIDER_DEFAULT}

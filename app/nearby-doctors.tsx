@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TouchableOpacity, ActivityIndicator,
   ScrollView, Alert, Platform,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT, MapPlaceholder, mapsAvailable } from '@/src/components/MapViewCompat';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -134,51 +134,42 @@ export default function NearbyDoctorsScreen() {
       />
 
       {/* Map */}
-      {mapsAvailable && MapView ? (
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFill}
-          provider={PROVIDER_DEFAULT}
-          showsUserLocation
-          showsMyLocationButton={false}
-          initialRegion={
-            myLocation
-              ? { ...myLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
-              : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
-          }
-        >
-          {/* 25km search radius */}
-          {myLocation && (
-            <Circle
-              center={myLocation}
-              radius={25000}
-              strokeColor="rgba(99,102,241,0.4)"
-              fillColor="rgba(99,102,241,0.06)"
-              strokeWidth={1.5}
-            />
-          )}
-
-          {/* Doctor markers */}
-          {doctors.map(doc => (
-            <Marker
-              key={doc.id}
-              coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
-              onPress={() => setSelectedDoctor(doc)}
-            >
-              <View style={[styles.doctorMarker, { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]}>
-                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.doctorMarkerInner}>
-                  <MaterialIcons name="medical-services" size={16} color="#fff" />
-                </LinearGradient>
-                <View style={[styles.markerOnlineDot, { backgroundColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]} />
-              </View>
-            </Marker>
-          ))}
-        </MapView>
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' }]}>
-          <MapPlaceholder label="Map requires a dev build" />
-        </View>
-      )}
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
+        provider={PROVIDER_DEFAULT}
+        showsUserLocation
+        showsMyLocationButton={false}
+        initialRegion={
+          myLocation
+            ? { ...myLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
+            : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
+        }
+      >
+        {myLocation && (
+          <Circle
+            center={myLocation}
+            radius={25000}
+            strokeColor="rgba(99,102,241,0.4)"
+            fillColor="rgba(99,102,241,0.06)"
+            strokeWidth={1.5}
+          />
+        )}
+        {doctors.map(doc => (
+          <Marker
+            key={doc.id}
+            coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
+            onPress={() => setSelectedDoctor(doc)}
+          >
+            <View style={[styles.doctorMarker, { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]}>
+              <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.doctorMarkerInner}>
+                <MaterialIcons name="medical-services" size={16} color="#fff" />
+              </LinearGradient>
+              <View style={[styles.markerOnlineDot, { backgroundColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' }]} />
+            </View>
+          </Marker>
+        ))}
+      </MapView>
 
       {/* Loading overlay */}
       {loading && (

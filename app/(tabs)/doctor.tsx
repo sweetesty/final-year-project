@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, PROVIDER_DEFAULT, MapPlaceholder, mapsAvailable } from '@/src/components/MapViewCompat';
+import MapView, { Marker, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import * as Location from 'expo-location';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -302,41 +302,37 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
 
       {/* ── Map (top half) ── */}
       <View style={styles.mapContainer}>
-        {mapsAvailable && MapView ? (
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            provider={PROVIDER_DEFAULT}
-            showsUserLocation
-            showsMyLocationButton={false}
-            initialRegion={
-              myLocation
-                ? { ...myLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
-                : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
-            }
-          >
-            {mapDoctors.map((doc: any) => (
-              <Marker
-                key={doc.id}
-                coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
-                onPress={() => focusDoctor(doc)}
-              >
-                <View style={[
-                  styles.mapMarker,
-                  selectedMarker?.id === doc.id && styles.mapMarkerSelected,
-                  { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' },
-                ]}>
-                  <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.mapMarkerInner}>
-                    <MaterialIcons name="medical-services" size={14} color="#fff" />
-                  </LinearGradient>
-                  {isOnline(doc.last_seen) && <View style={styles.markerOnlineDot} />}
-                </View>
-              </Marker>
-            ))}
-          </MapView>
-        ) : (
-          <MapPlaceholder label="Map requires a dev build" />
-        )}
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          provider={PROVIDER_DEFAULT}
+          showsUserLocation
+          showsMyLocationButton={false}
+          initialRegion={
+            myLocation
+              ? { ...myLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
+              : { latitude: 9.0765, longitude: 7.3986, latitudeDelta: 0.5, longitudeDelta: 0.5 }
+          }
+        >
+          {mapDoctors.map((doc: any) => (
+            <Marker
+              key={doc.id}
+              coordinate={{ latitude: doc.latitude, longitude: doc.longitude }}
+              onPress={() => focusDoctor(doc)}
+            >
+              <View style={[
+                styles.mapMarker,
+                selectedMarker?.id === doc.id && styles.mapMarkerSelected,
+                { borderColor: isOnline(doc.last_seen) ? '#10B981' : '#94A3B8' },
+              ]}>
+                <LinearGradient colors={['#4338CA', '#6366F1']} style={styles.mapMarkerInner}>
+                  <MaterialIcons name="medical-services" size={14} color="#fff" />
+                </LinearGradient>
+                {isOnline(doc.last_seen) && <View style={styles.markerOnlineDot} />}
+              </View>
+            </Marker>
+          ))}
+        </MapView>
 
         {/* Map header overlay */}
         <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={styles.mapHeaderOverlay}>

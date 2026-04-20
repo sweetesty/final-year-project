@@ -668,10 +668,11 @@ export default function HomeScreen() {
             </View>
             <View style={{ gap: 12 }}>
               {[
-                { id: 'en', name: 'English', flag: '🇬🇧' },
-                { id: 'yo', name: 'Yorùbá', flag: '🇳🇬' },
-                { id: 'ig', name: 'Igbo', flag: '🇳🇬' },
-                { id: 'ha', name: 'Hausa', flag: '🇳🇬' },
+                { id: 'en',  name: 'English',       flag: '🇬🇧' },
+                { id: 'yo',  name: 'Yorùbá',         flag: '🇳🇬' },
+                { id: 'ig',  name: 'Igbo',            flag: '🇳🇬' },
+                { id: 'ha',  name: 'Hausa',           flag: '🇳🇬' },
+                { id: 'pcm', name: 'Nigerian Pidgin', flag: '🇳🇬' },
               ].map((lang) => (
                 <TouchableOpacity
                   key={lang.id}

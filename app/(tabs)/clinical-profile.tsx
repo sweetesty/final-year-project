@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,6 +8,7 @@ import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeContext } from '@/src/context/ThemeContext';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +17,8 @@ import { supabase } from '@/src/services/SupabaseService';
 export default function ClinicalProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const { preference, setPreference } = useThemeContext();
+  const isDark = colorScheme === 'dark';
   const { session, signOut, role } = useAuthViewModel();
   const { t } = useTranslation();
   const router = useRouter();
@@ -187,7 +190,26 @@ export default function ClinicalProfileScreen() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: themeColors.muted }]}>{t('doctor.system_settings')}</Text>
         <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <TouchableOpacity 
+          {/* Dark mode toggle */}
+          <View style={[styles.profileItem, { borderBottomColor: themeColors.border }]}>
+            <View style={[styles.iconBox, { backgroundColor: isDark ? '#818CF815' : '#6366F115' }]}>
+              <MaterialIcons name={isDark ? 'dark-mode' : 'light-mode'} size={22} color={themeColors.tint} />
+            </View>
+            <View style={styles.itemContent}>
+              <Text style={[styles.itemValue, { color: themeColors.text }]}>Dark Mode</Text>
+              <Text style={[styles.itemLabel, { color: themeColors.muted }]}>
+                {preference === 'system' ? 'Following system' : isDark ? 'On' : 'Off'}
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={(val) => setPreference(val ? 'dark' : 'light')}
+              trackColor={{ false: themeColors.border, true: themeColors.tint }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <TouchableOpacity
             style={[styles.profileItem, { borderBottomWidth: 0 }]}
             onPress={() => router.push('/change-password')}
           >

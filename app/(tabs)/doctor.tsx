@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Dimensions, FlatList } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import MapView, { Marker, PROVIDER_DEFAULT } from '@/src/components/MapViewCompat';
 import * as Location from 'expo-location';
 import { Colors, Spacing, BorderRadius, Shadows, HeaderGradient } from '@/constants/theme';
@@ -260,7 +261,7 @@ function PatientDoctorView({ allDoctors, linkedDoctors, myCode, session, router,
       : activeFilter === 'All'
         ? allDoctors
         : allDoctors.filter((d: any) =>
-            d.specialization?.toLowerCase().includes(activeFilter.toLowerCase())
+            d.specialization?.toLowerCase() === activeFilter.toLowerCase()
           );
 
     if (searchQuery.trim()) {
@@ -562,8 +563,8 @@ export default function DoctorDashboard() {
   }, [params.patientId, linkedPatients]);
 
   // Fetch patient meds for clinical review
-  const { medications: patientMeds, summary: medSummary } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
-  const { chartData: patientChartData } = useVitalsViewModel(selectedPatient?.id || '');
+  const { medications: patientMeds, summary: medSummary, refresh: refreshMeds } = useMedicationViewModel(selectedPatient?.id || '', selectedPatient?.full_name);
+  const { chartData: patientChartData, refresh: refreshVitals } = useVitalsViewModel(selectedPatient?.id || '');
   const [myCode, setMyCode] = useState<string>(''); // Patient's own link code
   const [linkCode, setLinkCode] = useState<string>(''); // Input field for linking
   const [loading, setLoading] = useState(true);
@@ -579,6 +580,8 @@ export default function DoctorDashboard() {
       }
     }
   }, [session, role]);
+
+
 
   const loadDoctor = async () => {
     setLoading(true);
@@ -710,6 +713,19 @@ export default function DoctorDashboard() {
       setLoadingRecords(false);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[DoctorDashboard] Panel focused, refreshing context...');
+      if (selectedPatient) {
+        refreshMeds();
+        if (typeof refreshVitals === 'function') {
+          refreshVitals();
+        }
+        loadPatientDetails();
+      }
+    }, [selectedPatient, refreshMeds, refreshVitals, loadPatientDetails])
+  );
 
   if (loading) return <View style={styles.centered}><ActivityIndicator color={themeColors.tint} /></View>;
 

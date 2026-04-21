@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Colors, Spacing, Shadows, HeaderGradient } from '@/constants/theme';
@@ -117,7 +118,13 @@ export default function DoctorHomeScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [session, refreshAlertsOnly]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      refreshAlertsOnly();
+      // Also optionally trigger a full load if needed
+      load(true);
+    }, [refreshAlertsOnly, load])
+  );
 
   const handleAcceptAlert = async (alertId: string, patientId: string, patientName: string) => {
     try {
@@ -248,15 +255,15 @@ export default function DoctorHomeScreen() {
                   <View style={styles.emergencyActions}>
                     <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: '#DC2626' }]} onPress={() => handleAcceptAlert(alert.id, alert.patientid, alert.profiles?.full_name ?? 'Unknown Patient')}>
                       <MaterialIcons name="check-circle" size={16} color="#fff" />
-                      <Text style={styles.emergencyBtnText}>{t('doctor.accept_case')}</Text>
+                      <Text style={styles.emergencyBtnText} numberOfLines={1}>{t('doctor.accept_case')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]} onPress={() => Linking.openURL('tel:+000000000')}>
                       <MaterialIcons name="call" size={16} color="#fff" />
-                      <Text style={styles.emergencyBtnText}>{t('common.call')}</Text>
+                      <Text style={styles.emergencyBtnText} numberOfLines={1}>{t('common.call')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.emergencyBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]} onPress={() => router.push({ pathname: '/chat-room', params: { partnerId: alert.patientid, partnerName: alert.profiles?.full_name } })}>
                       <MaterialIcons name="chat" size={16} color="#fff" />
-                      <Text style={styles.emergencyBtnText}>{t('common.message')}</Text>
+                      <Text style={styles.emergencyBtnText} numberOfLines={1}>{t('common.message')}</Text>
                     </TouchableOpacity>
                   </View>
                 </LinearGradient>
@@ -432,9 +439,9 @@ const styles = StyleSheet.create({
   emergencyPatient: { color: '#fff', fontSize: 16, fontWeight: '800' },
   emergencyCondition: { color: 'rgba(252,165,165,0.85)', fontSize: 12, fontWeight: '500', marginTop: 2 },
   emergencyPulseDot: { padding: 4 },
-  emergencyActions: { flexDirection: 'row', gap: 8 },
-  emergencyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12 },
-  emergencyBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  emergencyActions: { flexDirection: 'row', gap: 6, alignItems: 'stretch' },
+  emergencyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, borderRadius: 12, paddingHorizontal: 4 },
+  emergencyBtnText: { color: '#fff', fontSize: 9.5, fontWeight: '800', textAlign: 'center' },
 
   // Empty
   emptyCard: { borderRadius: 20, padding: 32, alignItems: 'center', marginBottom: 16, ...Shadows.light },

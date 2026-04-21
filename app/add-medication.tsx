@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
   ScrollView, Switch, KeyboardAvoidingView, Platform, Alert,
@@ -11,28 +11,70 @@ import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMedicationViewModel } from '@/src/viewmodels/useMedicationViewModel';
 import { useAuthViewModel } from '@/src/viewmodels/useAuthViewModel';
+import { useFocusEffect } from '@react-navigation/native';
 
 const DURATION_PRESETS = [3, 5, 7, 14, 30];
 
 export default function AddMedicationScreen() {
-  const { mode, patientId: targetId } = useLocalSearchParams<{ mode?: string; patientId?: string }>();
+  const { mode, patientId: targetId, medicationId } = useLocalSearchParams<{ mode?: string; patientId?: string; medicationId?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { t } = useTranslation();
-  const { session } = useAuthViewModel();
+  const { session, role } = useAuthViewModel();
 
   const activePatientId = targetId || session?.user?.id || '';
-  const { addMedication } = useMedicationViewModel(activePatientId);
+  const { addMedication, updateMedication, deleteMedication, medications } = useMedicationViewModel(activePatientId);
 
   const isPrescribing = mode === 'prescribe';
+  const isEditing = mode === 'edit';
+  const [isPrescription, setIsPrescription] = useState(false);
+
+  useEffect(() => {
+    if (isEditing && medicationId && medications.length > 0) {
+      const med = medications.find(m => m.id === medicationId);
+      if (med) {
+        setIsPrescription(!!med.isPrescribed);
+        setForm({
+          name: med.name,
+          dosage: med.dosage,
+          instructions: med.instructions || '',
+          isCritical: med.isCritical,
+          frequency: med.frequency || 'daily',
+        });
+        setDurationEnabled(!!med.durationDays);
+        if (med.durationDays) {
+          if (DURATION_PRESETS.includes(med.durationDays)) {
+            setDurationDays(med.durationDays);
+            setUseCustom(false);
+          } else {
+            setCustomDuration(med.durationDays.toString());
+            setUseCustom(true);
+          }
+        }
+        if (med.times && med.times.length > 0) {
+          const [h, m] = med.times[0].split(':').map(Number);
+          const d = new Date();
+          d.setHours(h, m, 0, 0);
+          setSelectedTime(d);
+        }
+      }
+    }
+  }, [isEditing, medicationId, medications]);
+
+  const canEdit = !isEditing || (role === 'doctor' || !isPrescription);
+
+  useEffect(() => {
+    console.log('[AddMedication] state:', { mode, isEditing, isPrescribing, isPrescription, role, canEdit });
+  }, [mode, isEditing, isPrescribing, isPrescription, role, canEdit]);
 
   const [form, setForm] = useState({
     name: '',
     dosage: '',
     instructions: '',
     isCritical: false,
-    frequency: 'daily' as 'daily' | 'weekly',
+    frequency: 'daily' as any,
   });
 
   const [selectedTime, setSelectedTime] = useState(new Date());
@@ -68,24 +110,37 @@ export default function AddMedicationScreen() {
     const timeString = `${selectedTime.getHours().toString().padStart(2, '0')}:${selectedTime.getMinutes().toString().padStart(2, '0')}`;
 
     try {
-      await addMedication({
-        name: form.name,
-        dosage: form.dosage,
-        instructions: form.instructions,
-        isCritical: form.isCritical,
-        frequency: form.frequency,
-        times: [timeString],
-        isPrescribed: isPrescribing,
-        prescribedBy: isPrescribing
-          ? (session?.user?.user_metadata?.full_name || 'Doctor')
-          : undefined,
-        durationDays: durationEnabled ? effectiveDuration : undefined,
-        startDate: new Date().toISOString().split('T')[0],
-      });
+      if (isEditing && medicationId) {
+        await updateMedication(medicationId, {
+          name: form.name,
+          dosage: form.dosage,
+          instructions: form.instructions,
+          isCritical: form.isCritical,
+          frequency: form.frequency,
+          times: [timeString],
+        });
+      } else {
+        await addMedication({
+          name: form.name,
+          dosage: form.dosage,
+          instructions: form.instructions,
+          isCritical: form.isCritical,
+          frequency: form.frequency,
+          times: [timeString],
+          isPrescribed: isPrescribing,
+          prescribedBy: isPrescribing
+            ? (session?.user?.user_metadata?.full_name || 'Doctor')
+            : undefined,
+          durationDays: durationEnabled ? effectiveDuration : undefined,
+          startDate: new Date().toISOString().split('T')[0],
+        });
+      }
 
       Alert.alert(
         'Saved',
-        durationEnabled
+        isEditing 
+          ? 'Medication updated successfully!'
+          : durationEnabled
           ? `Reminders set for ${effectiveDuration} day${effectiveDuration > 1 ? 's' : ''} at ${timeString}.`
           : isPrescribing
           ? 'Prescription added successfully!'
@@ -95,6 +150,29 @@ export default function AddMedicationScreen() {
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to save medication.');
     }
+  };
+
+  const handleDelete = () => {
+    if (!medicationId) return;
+    if (isPrescription && role !== 'doctor') {
+      Alert.alert('Restricted', 'Only doctors can remove clinical prescriptions.');
+      return;
+    }
+    Alert.alert(
+      'Delete Medication',
+      'Are you sure you want to remove this medication?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            await deleteMedication(medicationId);
+            router.back();
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -113,11 +191,12 @@ export default function AddMedicationScreen() {
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.name')} *</Text>
           <TextInput
-            style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
+            style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card, opacity: canEdit ? 1 : 0.6 }]}
             placeholder="e.g. Aspirin"
             placeholderTextColor={themeColors.muted}
             value={form.name}
             onChangeText={(v) => setForm({ ...form, name: v })}
+            editable={canEdit}
           />
         </View>
 
@@ -125,11 +204,12 @@ export default function AddMedicationScreen() {
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.dosage')} *</Text>
           <TextInput
-            style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
+            style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card, opacity: canEdit ? 1 : 0.6 }]}
             placeholder="e.g. 500mg, 1 tablet"
             placeholderTextColor={themeColors.muted}
             value={form.dosage}
             onChangeText={(v) => setForm({ ...form, dosage: v })}
+            editable={canEdit}
           />
         </View>
 
@@ -137,8 +217,9 @@ export default function AddMedicationScreen() {
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>{t('med.time')}</Text>
           <TouchableOpacity
-            style={[styles.timeSelector, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
-            onPress={() => setShowTimePicker(true)}
+            style={[styles.timeSelector, { borderColor: themeColors.border, backgroundColor: themeColors.card, opacity: canEdit ? 1 : 0.6 }]}
+            onPress={() => canEdit && setShowTimePicker(true)}
+            disabled={!canEdit}
           >
             <MaterialIcons name="access-time" size={22} color={themeColors.tint} />
             <Text style={{ fontSize: 28, fontWeight: '800', color: themeColors.tint }}>
@@ -176,6 +257,7 @@ export default function AddMedicationScreen() {
               onValueChange={setDurationEnabled}
               trackColor={{ false: themeColors.border, true: themeColors.tint + '88' }}
               thumbColor={durationEnabled ? themeColors.tint : themeColors.muted}
+              disabled={!canEdit}
             />
           </View>
 
@@ -211,24 +293,26 @@ export default function AddMedicationScreen() {
                       borderColor: useCustom ? themeColors.tint : themeColors.border,
                     },
                   ]}
-                  onPress={() => setUseCustom(true)}
-                >
-                  <Text style={[styles.presetChipText, { color: useCustom ? '#fff' : themeColors.text }]}>
-                    Custom
-                  </Text>
-                </TouchableOpacity>
+                    onPress={() => canEdit && setUseCustom(true)}
+                    disabled={!canEdit}
+                  >
+                    <Text style={[styles.presetChipText, { color: useCustom ? '#fff' : themeColors.text }]}>
+                      Custom
+                    </Text>
+                  </TouchableOpacity>
               </View>
 
               {/* Custom input */}
               {useCustom && (
                 <View style={styles.customRow}>
                   <TextInput
-                    style={[styles.customInput, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.background }]}
+                    style={[styles.customInput, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.background, opacity: canEdit ? 1 : 0.6 }]}
                     placeholder="Number of days"
                     placeholderTextColor={themeColors.muted}
                     value={customDuration}
                     onChangeText={setCustomDuration}
                     keyboardType="number-pad"
+                    editable={canEdit}
                   />
                   <Text style={[{ color: themeColors.muted, fontSize: 15 }]}>days</Text>
                 </View>
@@ -260,6 +344,7 @@ export default function AddMedicationScreen() {
             onValueChange={(v) => setForm({ ...form, isCritical: v })}
             trackColor={{ false: '#CBD5E0', true: themeColors.emergency }}
             thumbColor={form.isCritical ? themeColors.emergency : themeColors.muted}
+            disabled={!canEdit}
           />
         </View>
 
@@ -267,24 +352,51 @@ export default function AddMedicationScreen() {
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.text }]}>Additional Instructions</Text>
           <TextInput
-            style={[styles.input, { height: 80, borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card }]}
+            style={[styles.input, { height: 80, borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.card, opacity: canEdit ? 1 : 0.6 }]}
             placeholder="e.g. Take after meal"
             placeholderTextColor={themeColors.muted}
             value={form.instructions}
             onChangeText={(v) => setForm({ ...form, instructions: v })}
             multiline
+            editable={canEdit}
           />
         </View>
 
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: themeColors.tint }]}
-          onPress={handleSave}
-        >
-          <MaterialIcons name="check-circle" size={22} color="#fff" />
-          <Text style={styles.saveButtonText}>
-            {isPrescribing ? t('common.add_prescription') : t('med.add')}
-          </Text>
-        </TouchableOpacity>
+        {(!isEditing || canEdit) && (
+          <TouchableOpacity
+            style={[styles.saveButton, { backgroundColor: themeColors.tint }]}
+            onPress={handleSave}
+          >
+            <MaterialIcons name="check-circle" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>
+              {isEditing ? 'Update Medication' : isPrescribing ? t('common.add_prescription') : t('med.add')}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {isEditing && (
+          <TouchableOpacity
+            style={[styles.deleteButton, { 
+              borderColor: '#EF4444', 
+              opacity: (isPrescription && role !== 'doctor') ? 0.5 : 1 
+            }]}
+            onPress={handleDelete}
+          >
+            <MaterialIcons name="delete-outline" size={20} color="#EF4444" />
+            <Text style={styles.deleteButtonText}>
+              {(isPrescription && role !== 'doctor') ? 'Prescription Restricted' : 'Delete Medication'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {isEditing && isPrescription && role === 'patient' && (
+          <View style={[styles.infoBanner, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : '#EEF2FF', borderColor: themeColors.tint }]}>
+            <MaterialIcons name="info" size={20} color={themeColors.tint} />
+            <Text style={[styles.infoText, { color: themeColors.text }]}>
+              This is a doctor's prescription. You cannot modify clinical drug details.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -337,4 +449,26 @@ const styles = StyleSheet.create({
     gap: 10, marginTop: Spacing.md, marginBottom: Spacing.xxl, ...Shadows.medium,
   },
   saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  deleteButton: {
+    height: 56, borderRadius: BorderRadius.xl,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: 10, borderWidth: 1.5, marginTop: -Spacing.sm, marginBottom: Spacing.xxl,
+  },
+  deleteButtonText: { color: '#EF4444', fontSize: 16, fontWeight: '700' },
+  infoBanner: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xxl + 20,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
 });

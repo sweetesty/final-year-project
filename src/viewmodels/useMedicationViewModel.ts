@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '../services/SupabaseService';
 import { Medication, MedicationLog, NewMedication } from '../models/Medication';
@@ -54,6 +54,8 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
     setHasFetched(true);
   }, [patientId]);
 
+
+
   const fetchTodayLogs = useCallback(async () => {
     if (!patientId || patientId.length < 10 || patientId === 'patient-123') return;
     
@@ -79,6 +81,23 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
       setTodayLogs(mapped);
     }
   }, [patientId]);
+
+  // Automatic Midnight Refresh
+  const lastRefreshDate = useRef(new Date().toDateString());
+
+  useEffect(() => {
+    const checkMidnight = () => {
+      const today = new Date().toDateString();
+      if (lastRefreshDate.current !== today) {
+        console.log('[MedicationViewModel] Midnight/Date-change refresh triggered');
+        lastRefreshDate.current = today;
+        fetchTodayLogs();
+      }
+    };
+
+    const interval = setInterval(checkMidnight, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, [fetchTodayLogs]);
 
   // Calculations for summary stats
   const summary = useMemo(() => {
@@ -163,8 +182,31 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
         endDate: data.end_date,
         createdAt: data.createdat,
       };
-      await NotificationService.scheduleMedicationReminders(mapped);
+      
+      // 1. Local Refresh (Optimistic)
       await fetchMedications();
+
+      // 2. Schedule Local Notifications for Patient (if they are adding for themselves)
+      await NotificationService.scheduleMedicationReminders(mapped);
+
+      // 3. Notify Patient via Push (if it is a doctor prescription)
+      if (mapped.isPrescribed && patientId) {
+        try {
+          const { data: profile } = await supabase.from('profiles').select('push_token, full_name').eq('id', patientId).single();
+          if (profile?.push_token) {
+            const cleanDoctorName = (mapped.prescribedBy || 'Doctor').replace(/^(Doctor|Dr\.?)\s+/i, '');
+            await NotificationService.sendPushToToken(
+              profile.push_token,
+              '📋 New Prescription Added',
+              `Dr. ${cleanDoctorName} has added ${mapped.name} to your clinical medication.`,
+              { type: 'new_prescription', medicationId: mapped.id }
+            );
+            console.log(`[MedicationViewModel] Notified patient ${profile.full_name} about new med: ${mapped.name}`);
+          }
+        } catch (e) {
+          console.warn('[MedicationViewModel] Failed to notify patient:', e);
+        }
+      }
     }
   };
 
@@ -336,37 +378,25 @@ export const useMedicationViewModel = (patientId: string, patientName?: string) 
     const subscription = supabase
       .channel(channelName)
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*', // Catch All to be safe, filter in code if needed
         schema: 'public',
         table: 'medications',
         filter: `patientid=eq.${patientId}`,
-      }, (payload: any) => {
-        const newMed = payload.new;
-        if (newMed.is_prescribed) {
-          NotificationService.showLocalNotification(
-            '📋 New Prescription Added',
-            `Doctor ${newMed.prescribed_by || ''} has added ${newMed.name} to your schedule.`
-          );
-        }
-        fetchMedications();
+      }, (payload) => {
+        console.log(`[MedicationViewModel] Realtime Med Event: ${payload.eventType} for patient ${patientId}`);
+        fetchMedications(true); // Always refresh on any change
       })
       .on('postgres_changes', {
-        event: '*', // Watch all changes for summary updates
+        event: '*', 
         schema: 'public',
         table: 'medication_logs',
         filter: `patientid=eq.${patientId}`,
       }, () => {
         fetchTodayLogs();
-      }) // End of log watch
-      .on('postgres_changes', {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'medications',
-        filter: `patientid=eq.${patientId}`,
-      }, () => {
-        fetchMedications();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[MedicationViewModel] Med Subscription Status: ${status} for ${channelName}`);
+      });
 
     return () => { supabase.removeChannel(subscription); };
   }, [patientId, fetchMedications]);

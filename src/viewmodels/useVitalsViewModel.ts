@@ -52,6 +52,7 @@ export const useVitalsViewModel = (patientId: string) => {
     history,
     loading,
     fetchHistory,
+    refresh: fetchHistory,
     chartData: getChartData()
   };
 };

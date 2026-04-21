@@ -156,13 +156,15 @@ export default function EmergencyCaseScreen() {
         text: 'Mark Resolved', onPress: async () => {
           setResolving(true);
           if (alertId) {
-            await supabase.from('fall_events').update({ 
+            // Triggering the update without awaiting before navigation for instant response
+            supabase.from('fall_events').update({ 
               resolved: true,
               status: 'resolved',
               resolved_at: new Date().toISOString()
-            }).eq('id', alertId);
+            }).eq('id', alertId).then(() => {
+              console.log('[EmergencyCase] Alert resolved in DB');
+            });
           }
-          setResolving(false);
           router.back();
         },
       },

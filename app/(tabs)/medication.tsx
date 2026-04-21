@@ -59,15 +59,19 @@ export default function MedicationDashboard() {
   };
 
   const openEdit = (item: any) => {
-    setSelectedMed(item);
-    setEditForm({
-      name: item.name,
-      dosage: item.dosage,
-      instructions: item.instructions || '',
-      isCritical: item.isCritical ?? false,
+    if (item.isPrescribed) {
+      Alert.alert(
+        'Subscription Locked',
+        'This medication was prescribed by your doctor. Clinical details cannot be modified by patients.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    // Navigate to the centralized secure edit screen instead of using inline modal
+    router.push({
+      pathname: '/add-medication',
+      params: { mode: 'edit', medicationId: item.id }
     });
-    setDetailVisible(false);
-    setEditVisible(true);
   };
 
   const handleDelete = (item: any) => {
@@ -118,8 +122,7 @@ export default function MedicationDashboard() {
       ...med,
       scheduledTime: time,
       status: todayLogs.find(l => 
-        (l.medicationid === med.id || l.medicationId === med.id) && 
-        (l.scheduledtime === time || l.scheduledTime === time)
+        l.medicationId === med.id && l.scheduledTime === time
       )?.status || 'pending',
     }))
   ).sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
@@ -201,10 +204,11 @@ export default function MedicationDashboard() {
                           <MaterialIcons name="volume-up" size={16} color={themeColors.tint} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.cardActionBtn, { backgroundColor: 'rgba(99,102,241,0.1)' }]}
+                          style={[styles.cardActionBtn, { backgroundColor: item.isPrescribed ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.1)' }]}
                           onPress={() => openEdit(item)}
+                          disabled={item.isPrescribed}
                         >
-                          <MaterialIcons name="edit" size={16} color="#6366F1" />
+                          <MaterialIcons name={item.isPrescribed ? "lock" : "edit"} size={16} color={item.isPrescribed ? themeColors.muted : "#6366F1"} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.cardActionBtn, { backgroundColor: 'rgba(239,68,68,0.1)' }]}
@@ -222,7 +226,7 @@ export default function MedicationDashboard() {
                       </Text>
                       {item.prescribedBy && (
                         <Text style={[styles.prescribedByText, { color: themeColors.muted }]}>
-                          Prescribed by Dr. {item.prescribedBy}
+                          Prescribed by {item.prescribedBy.toLowerCase().startsWith('dr') ? item.prescribedBy : `Dr. ${item.prescribedBy}`}
                         </Text>
                       )}
                       {item.durationDays && item.endDate && (
@@ -286,13 +290,15 @@ export default function MedicationDashboard() {
                 <MaterialIcons name="medication" size={32} color={themeColors.tint} />
               </View>
               <View style={styles.modalHeaderBtns}>
-                <TouchableOpacity
-                  style={[styles.modalHeaderAction, { backgroundColor: 'rgba(99,102,241,0.1)' }]}
-                  onPress={() => openEdit(selectedMed)}
-                >
-                  <MaterialIcons name="edit" size={18} color="#6366F1" />
-                  <Text style={[styles.modalHeaderActionText, { color: '#6366F1' }]}>Edit</Text>
-                </TouchableOpacity>
+                {!selectedMed?.isPrescribed && (
+                  <TouchableOpacity
+                    style={[styles.modalHeaderAction, { backgroundColor: 'rgba(99,102,241,0.1)' }]}
+                    onPress={() => openEdit(selectedMed)}
+                  >
+                    <MaterialIcons name="edit" size={18} color="#6366F1" />
+                    <Text style={[styles.modalHeaderActionText, { color: '#6366F1' }]}>Edit</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[styles.modalHeaderAction, { backgroundColor: 'rgba(239,68,68,0.1)' }]}
                   onPress={() => handleDelete(selectedMed)}
